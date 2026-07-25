@@ -11,9 +11,9 @@
 !**/.env.example
 credentials/
 **/credentials/
-!chiefmind/credentials/
-chiefmind/credentials/*
-!chiefmind/credentials/.gitkeep
+!credentials/
+credentials/*
+!credentials/.gitkeep
 credentials.json
 **/credentials.json
 token.json
@@ -26,6 +26,27 @@ __pycache__/
 *.pyc
 
 # Runtime workflow data can contain private emails, drafts, and audit records.
+Inbox/*
+Needs_Action/*
+Plans/*
+Pending_Approval/*
+Approved/*
+Rejected/*
+Done/*
+Failed/*
+Logs/*
+!Inbox/.gitkeep
+!Needs_Action/.gitkeep
+!Plans/.gitkeep
+!Pending_Approval/.gitkeep
+!Approved/.gitkeep
+!Rejected/.gitkeep
+!Done/.gitkeep
+!Failed/.gitkeep
+!Logs/.gitkeep
+
+# Ignore private runtime remnants from the pre-refactor chiefmind/ layout.
+chiefmind/credentials/*
 chiefmind/Inbox/*
 chiefmind/Needs_Action/*
 chiefmind/Plans/*
@@ -35,12 +56,3 @@ chiefmind/Rejected/*
 chiefmind/Done/*
 chiefmind/Failed/*
 chiefmind/Logs/*
-!chiefmind/Inbox/.gitkeep
-!chiefmind/Needs_Action/.gitkeep
-!chiefmind/Plans/.gitkeep
-!chiefmind/Pending_Approval/.gitkeep
-!chiefmind/Approved/.gitkeep
-!chiefmind/Rejected/.gitkeep
-!chiefmind/Done/.gitkeep
-!chiefmind/Failed/.gitkeep
-!chiefmind/Logs/.gitkeep
