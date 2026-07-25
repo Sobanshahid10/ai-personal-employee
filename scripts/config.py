@@ -105,6 +105,9 @@ GOOGLE_TOKEN_FILE = _path(
 PROCESSED_IDS_FILE = _path(
     "PROCESSED_IDS_FILE", CREDENTIALS_DIR / "processed_ids.json"
 )
+REASONING_LOOP_FILE = _path(
+    "REASONING_LOOP_FILE", SCRIPTS_DIR / "reasoning_loop.py"
+)
 KNOWLEDGE_BASE_FILE = _path(
     "KNOWLEDGE_BASE_FILE", DOCS_DIR / "KnowledgeBase.md"
 )
@@ -114,9 +117,22 @@ LOG_FILE = _path("LOG_FILE", LOGS_DIR / "agent.log")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile").strip()
 GMAIL_QUERY = os.getenv("GMAIL_QUERY", "is:unread").strip()
+GMAIL_USER_ID = os.getenv("GMAIL_USER_ID", "me").strip()
+GMAIL_SCOPES = tuple(
+    scope.strip()
+    for scope in os.getenv(
+        "GMAIL_SCOPES",
+        "https://www.googleapis.com/auth/gmail.modify",
+    ).split(",")
+    if scope.strip()
+)
 GMAIL_POLL_INTERVAL = _int("GMAIL_POLL_INTERVAL", 120, minimum=1)
 GMAIL_RETRIES = _int("GMAIL_RETRIES", 3, minimum=0)
 GMAIL_RETRY_DELAY = _int("GMAIL_RETRY_DELAY", 5, minimum=0)
+GMAIL_MAX_RESULTS = _int("GMAIL_MAX_RESULTS", 100, minimum=1)
+REASONING_TRIGGER_TIMEOUT = _int(
+    "REASONING_TRIGGER_TIMEOUT", 300, minimum=1
+)
 
 DASHBOARD_HOST = os.getenv("DASHBOARD_HOST", "127.0.0.1").strip()
 DASHBOARD_PORT = _int("DASHBOARD_PORT", 5000, minimum=1)
