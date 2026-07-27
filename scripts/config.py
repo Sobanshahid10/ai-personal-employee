@@ -116,6 +116,12 @@ LOG_FILE = _path("LOG_FILE", LOGS_DIR / "agent.log")
 # External services and runtime behavior
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile").strip()
+EMAIL_DRAFT_TEMPERATURE = 0.3
+CLASSIFICATION_TEMPERATURE = 0.0
+REASONING_TOP_K = _int("REASONING_TOP_K", 3, minimum=1)
+REASONING_MAX_TOKENS = _int("REASONING_MAX_TOKENS", 1200, minimum=100)
+GROQ_RETRIES = _int("GROQ_RETRIES", 3, minimum=0)
+GROQ_RETRY_DELAY = _int("GROQ_RETRY_DELAY", 5, minimum=0)
 GMAIL_QUERY = os.getenv("GMAIL_QUERY", "is:unread").strip()
 GMAIL_USER_ID = os.getenv("GMAIL_USER_ID", "me").strip()
 GMAIL_SCOPES = tuple(
