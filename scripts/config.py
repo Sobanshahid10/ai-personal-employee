@@ -42,6 +42,18 @@ def _int(variable: str, default: int, *, minimum: int = 0) -> int:
     return value
 
 
+def _float(variable: str, default: float, *, minimum: float = 0.0) -> float:
+    """Read a bounded floating-point setting."""
+    raw_value = os.getenv(variable, str(default))
+    try:
+        value = float(raw_value)
+    except ValueError as exc:
+        raise ValueError(f"{variable} must be a number, got {raw_value!r}") from exc
+    if value < minimum:
+        raise ValueError(f"{variable} must be at least {minimum}, got {value}")
+    return value
+
+
 def _bool(variable: str, default: bool = False) -> bool:
     """Read a conventional boolean environment variable."""
     raw_value = os.getenv(variable, str(default)).strip().lower()
@@ -112,6 +124,12 @@ KNOWLEDGE_BASE_FILE = _path(
     "KNOWLEDGE_BASE_FILE", DOCS_DIR / "KnowledgeBase.md"
 )
 LOG_FILE = _path("LOG_FILE", LOGS_DIR / "agent.log")
+EXECUTION_RECEIPTS_FILE = _path(
+    "EXECUTION_RECEIPTS_FILE", LOGS_DIR / "execution_receipts.json"
+)
+LINKEDIN_POSTER_FILE = _path(
+    "LINKEDIN_POSTER_FILE", SCRIPTS_DIR / "linkedin_poster.py"
+)
 
 # External services and runtime behavior
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
@@ -138,6 +156,12 @@ GMAIL_RETRY_DELAY = _int("GMAIL_RETRY_DELAY", 5, minimum=0)
 GMAIL_MAX_RESULTS = _int("GMAIL_MAX_RESULTS", 100, minimum=1)
 REASONING_TRIGGER_TIMEOUT = _int(
     "REASONING_TRIGGER_TIMEOUT", 300, minimum=1
+)
+APPROVAL_SETTLE_SECONDS = _float(
+    "APPROVAL_SETTLE_SECONDS", 0.5, minimum=0.0
+)
+LINKEDIN_EXECUTION_TIMEOUT = _int(
+    "LINKEDIN_EXECUTION_TIMEOUT", 300, minimum=1
 )
 
 DASHBOARD_HOST = os.getenv("DASHBOARD_HOST", "127.0.0.1").strip()
