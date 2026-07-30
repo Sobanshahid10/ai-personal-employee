@@ -107,6 +107,17 @@ WORKFLOW_DIRS = (
     LOGS_DIR,
 )
 
+# Stable public aliases used by agents and dashboard folder mappings.
+INBOX = INBOX_DIR
+NEEDS_ACTION = NEEDS_ACTION_DIR
+PLANS = PLANS_DIR
+PENDING_APPROVAL = PENDING_APPROVAL_DIR
+APPROVED = APPROVED_DIR
+REJECTED = REJECTED_DIR
+DONE = DONE_DIR
+FAILED = FAILED_DIR
+LOGS = LOGS_DIR
+
 # Files
 GOOGLE_CREDENTIALS_FILE = _path(
     "GOOGLE_CREDENTIALS_FILE", CREDENTIALS_DIR / "credentials.json"
@@ -170,6 +181,17 @@ DASHBOARD_DEBUG = _bool("DASHBOARD_DEBUG", False)
 DASHBOARD_APPROVAL_TOKEN = os.getenv(
     "DASHBOARD_APPROVAL_TOKEN", ""
 ).strip()
+DASHBOARD_CORS_ORIGINS = tuple(
+    origin.strip()
+    for origin in os.getenv("DASHBOARD_CORS_ORIGINS", "*").split(",")
+    if origin.strip()
+)
+DASHBOARD_MAX_FILE_BYTES = _int(
+    "DASHBOARD_MAX_FILE_BYTES", 2_000_000, minimum=1
+)
+DASHBOARD_RECENT_ACTIVITY = _int(
+    "DASHBOARD_RECENT_ACTIVITY", 20, minimum=1
+)
 
 AUTO_LINKEDIN_POSTS = _bool("AUTO_LINKEDIN_POSTS", False)
 LINKEDIN_EMAIL = os.getenv("LINKEDIN_EMAIL", "").strip()

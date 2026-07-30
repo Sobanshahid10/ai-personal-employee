@@ -39,9 +39,9 @@ from config import (
 )
 from workflow_utils import (
     WorkflowFileError,
+    append_json_array,
     atomic_write_json,
     load_frontmatter_file,
-    load_json_array,
     load_json_object,
 )
 
@@ -101,10 +101,7 @@ def daily_log_path(value: datetime | None = None) -> Path:
 
 def append_audit_event(event: dict[str, Any]) -> None:
     """Append one operation to the current valid JSON audit array."""
-    path = daily_log_path()
-    events = load_json_array(path)
-    events.append(event)
-    atomic_write_json(path, events)
+    append_json_array(daily_log_path(), event)
 
 
 def load_receipts() -> dict[str, Any]:

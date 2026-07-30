@@ -4,11 +4,18 @@ from __future__ import annotations
 
 import json
 import re
+import threading
+from contextlib import contextmanager
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Any
+from typing import Any, Iterator, TextIO
 
 import yaml
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - fallback for non-POSIX systems
+    fcntl = None  # type: ignore[assignment]
 
 
 FRONTMATTER_PATTERN = re.compile(
@@ -16,6 +23,7 @@ FRONTMATTER_PATTERN = re.compile(
     r"(?:\r?\n|$)(?P<body>.*)\Z",
     re.DOTALL,
 )
+JSON_APPEND_LOCK = threading.RLock()
 
 
 class WorkflowFileError(ValueError):
@@ -26,6 +34,7 @@ def parse_frontmatter(
     text: str,
     *,
     source: str = "<memory>",
+    strip_body: bool = True,
 ) -> tuple[dict[str, Any], str]:
     """Parse YAML frontmatter with SafeLoader and return metadata plus body."""
     match = FRONTMATTER_PATTERN.match(text)
@@ -41,7 +50,8 @@ def parse_frontmatter(
         raise WorkflowFileError(
             f"Frontmatter in {source} must be a YAML mapping."
         )
-    return metadata, match.group("body").strip()
+    body = match.group("body")
+    return metadata, body.strip() if strip_body else body
 
 
 def load_frontmatter_file(path: Path) -> tuple[dict[str, Any], str]:
@@ -107,3 +117,28 @@ def load_json_array(path: Path) -> list[Any]:
     if not isinstance(payload, list):
         raise WorkflowFileError(f"{path} must contain a JSON array.")
     return payload
+
+
+@contextmanager
+def _exclusive_lock(path: Path) -> Iterator[TextIO]:
+    """Lock a sidecar file so separate ChiefMind services can append safely."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_file = path.open("a+", encoding="utf-8")
+    try:
+        if fcntl is not None:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        yield lock_file
+    finally:
+        if fcntl is not None:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+        lock_file.close()
+
+
+def append_json_array(path: Path, item: Any) -> None:
+    """Atomically append to a JSON array across threads and POSIX processes."""
+    lock_path = path.with_name(f".{path.name}.lock")
+    with JSON_APPEND_LOCK:
+        with _exclusive_lock(lock_path):
+            payload = load_json_array(path)
+            payload.append(item)
+            atomic_write_json(path, payload)
