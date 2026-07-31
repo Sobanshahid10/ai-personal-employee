@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#070b16">
+    <title>ChiefMind · Personal Employee</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+  </head>
+  <body>
+    <div class="ambient ambient-one" aria-hidden="true"></div>
+    <div class="ambient ambient-two" aria-hidden="true"></div>
+
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="#dashboard" aria-label="ChiefMind dashboard">
+        <span class="brand-mark" aria-hidden="true">C</span>
+        <span><strong>ChiefMind</strong><small>Personal Employee</small></span>
+      </a>
+      <nav class="navigation" aria-label="Workflow views">
+        <button class="nav-item active" data-view="dashboard"><span>⌂</span>Dashboard</button>
+        <button class="nav-item" data-view="pending_approval"><span>✓</span>Pending Approval <b class="nav-count" data-count="pending_approval">0</b></button>
+        <button class="nav-item" data-view="needs_action"><span>◇</span>Needs Action <b class="nav-count" data-count="needs_action">0</b></button>
+        <button class="nav-item" data-view="done"><span>●</span>Done <b class="nav-count" data-count="done">0</b></button>
+        <button class="nav-item" data-view="plans"><span>≡</span>Plans <b class="nav-count" data-count="plans">0</b></button>
+        <button class="nav-item" data-view="activity"><span>↗</span>Activity Log</button>
+        <button class="nav-item" data-view="failed"><span>!</span>Failed <b class="nav-count" data-count="failed">0</b></button>
+      </nav>
+      <div class="system-status"><i></i><span><strong>System online</strong><small>Refreshes every 30 seconds</small></span></div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <button class="menu-button" id="menu-button" aria-label="Toggle navigation" aria-expanded="false">☰</button>
+        <div><p class="eyebrow">Workflow command center</p><h1 id="view-title">Dashboard</h1></div>
+        <div class="topbar-actions">
+          <span class="last-updated" id="last-updated">Waiting for data…</span>
+          <button class="icon-button" id="refresh-button" aria-label="Refresh dashboard">↻</button>
+        </div>
+      </header>
+
+      <div class="alert hidden" id="alert" role="status" aria-live="polite"></div>
+
+      <section class="view active" id="view-dashboard" aria-labelledby="view-title">
+        <div class="kpi-grid" id="kpi-grid"></div>
+        <div class="dashboard-grid">
+          <article class="glass-panel span-two"><div class="section-heading"><div><p class="eyebrow">Live queue</p><h2>Needs your attention</h2></div><button class="text-button" data-go="pending_approval">View all →</button></div><div id="attention-list" class="item-list"></div></article>
+          <article class="glass-panel"><div class="section-heading"><div><p class="eyebrow">Latest events</p><h2>Recent activity</h2></div></div><div id="recent-timeline" class="timeline compact"></div></article>
+        </div>
+      </section>
+
+      <section class="view" id="view-folder" aria-labelledby="folder-title">
+        <article class="glass-panel"><div class="section-heading"><div><p class="eyebrow">Workflow items</p><h2 id="folder-title">Items</h2></div><span class="result-count" id="folder-count">0 items</span></div><div id="folder-list" class="item-list"></div></article>
+      </section>
+
+      <section class="view" id="view-activity" aria-labelledby="activity-title">
+        <article class="glass-panel"><div class="section-heading"><div><p class="eyebrow">Audit trail</p><h2 id="activity-title">Activity Log</h2></div><span class="result-count" id="activity-count">0 events</span></div><div id="activity-timeline" class="timeline"></div></article>
+      </section>
+    </main>
+
+    <div class="modal-backdrop hidden" id="detail-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <article class="modal-card">
+        <header class="modal-header"><div><p class="eyebrow" id="modal-folder">Item detail</p><h2 id="modal-title">Workflow item</h2></div><button class="icon-button" id="modal-close" aria-label="Close detail">×</button></header>
+        <div class="modal-content"><section><h3>Frontmatter</h3><dl class="metadata-grid" id="modal-metadata"></dl></section><section><h3>Markdown body</h3><pre class="markdown-body" id="modal-body"></pre></section></div>
+      </article>
+    </div>
+
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>

@@ -215,6 +215,14 @@ Markdown body.
             response.headers["Access-Control-Allow-Headers"],
         )
 
+    def test_root_serves_dashboard_frontend(self) -> None:
+        response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"ChiefMind", response.data)
+        self.assertIn(b"/static/app.js", response.data)
+        response.close()
+
 
 if __name__ == "__main__":
     unittest.main()

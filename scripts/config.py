@@ -174,6 +174,15 @@ APPROVAL_SETTLE_SECONDS = _float(
 LINKEDIN_EXECUTION_TIMEOUT = _int(
     "LINKEDIN_EXECUTION_TIMEOUT", 300, minimum=1
 )
+LINKEDIN_MODE = os.getenv("LINKEDIN_MODE", "mock").strip().lower()
+if LINKEDIN_MODE not in {"mock", "live"}:
+    raise ValueError("LINKEDIN_MODE must be 'mock' or 'live'.")
+LINKEDIN_ACCESS_TOKEN = os.getenv("LINKEDIN_ACCESS_TOKEN", "").strip()
+LINKEDIN_AUTHOR_URN = os.getenv("LINKEDIN_AUTHOR_URN", "").strip()
+LINKEDIN_API_VERSION = os.getenv("LINKEDIN_API_VERSION", "202607").strip()
+LINKEDIN_REQUEST_TIMEOUT = _int(
+    "LINKEDIN_REQUEST_TIMEOUT", 30, minimum=1
+)
 
 DASHBOARD_HOST = os.getenv("DASHBOARD_HOST", "127.0.0.1").strip()
 DASHBOARD_PORT = _int("DASHBOARD_PORT", 5000, minimum=1)
@@ -192,10 +201,6 @@ DASHBOARD_MAX_FILE_BYTES = _int(
 DASHBOARD_RECENT_ACTIVITY = _int(
     "DASHBOARD_RECENT_ACTIVITY", 20, minimum=1
 )
-
-AUTO_LINKEDIN_POSTS = _bool("AUTO_LINKEDIN_POSTS", False)
-LINKEDIN_EMAIL = os.getenv("LINKEDIN_EMAIL", "").strip()
-LINKEDIN_PASSWORD = os.getenv("LINKEDIN_PASSWORD", "").strip()
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").strip().upper()
 LOG_MAX_BYTES = _int("LOG_MAX_BYTES", 5_000_000, minimum=1)
@@ -239,15 +244,11 @@ def validate_config(*, strict: bool = False) -> list[str]:
         issues.append("GROQ_API_KEY is not set.")
     if not DASHBOARD_APPROVAL_TOKEN:
         issues.append("DASHBOARD_APPROVAL_TOKEN is not set.")
-    if AUTO_LINKEDIN_POSTS:
-        if not LINKEDIN_EMAIL:
-            issues.append(
-                "LINKEDIN_EMAIL is required when AUTO_LINKEDIN_POSTS=true."
-            )
-        if not LINKEDIN_PASSWORD:
-            issues.append(
-                "LINKEDIN_PASSWORD is required when AUTO_LINKEDIN_POSTS=true."
-            )
+    if LINKEDIN_MODE == "live":
+        if not LINKEDIN_ACCESS_TOKEN:
+            issues.append("LINKEDIN_ACCESS_TOKEN is required in live mode.")
+        if not LINKEDIN_AUTHOR_URN:
+            issues.append("LINKEDIN_AUTHOR_URN is required in live mode.")
 
     if strict and issues:
         formatted = "\n".join(f"- {issue}" for issue in issues)

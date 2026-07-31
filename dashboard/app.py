@@ -14,7 +14,7 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
-from flask import Flask, Response, jsonify, request
+from flask import Flask, Response, jsonify, request, send_from_directory
 
 
 # `python dashboard/app.py` places dashboard/ on sys.path. Bootstrap the sibling
@@ -271,6 +271,11 @@ def create_app(
     def handle_unexpected(error: Exception) -> tuple[Response, int]:
         LOGGER.exception("Unhandled dashboard error: %s", error)
         return jsonify({"error": "Internal server error.", "status": 500}), 500
+
+    @app.get("/")
+    def dashboard_index() -> Response:
+        """Serve the dashboard from the same origin as the API."""
+        return send_from_directory(app.static_folder, "index.html")
 
     @app.after_request
     def add_cors_headers(response: Response) -> Response:

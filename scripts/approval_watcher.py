@@ -6,6 +6,7 @@ import argparse
 import base64
 import hashlib
 import hmac
+import json
 import subprocess
 import sys
 import threading
@@ -251,7 +252,11 @@ def execute_linkedin(path: Path) -> dict[str, Any]:
             f"LinkedIn poster exited with {result.returncode}: "
             f"{result.stderr.strip()}"
         )
-    return {"provider": "linkedin", "result": "posted"}
+    try:
+        provider_result = json.loads(result.stdout.strip().splitlines()[-1])
+    except (IndexError, json.JSONDecodeError):
+        provider_result = {"provider": "linkedin", "result": "completed"}
+    return provider_result
 
 
 def route_file(path: Path, destination_dir: Path) -> Path:
