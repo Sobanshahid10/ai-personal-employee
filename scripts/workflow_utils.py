@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import threading
 from contextlib import contextmanager
@@ -24,6 +25,8 @@ FRONTMATTER_PATTERN = re.compile(
     re.DOTALL,
 )
 JSON_APPEND_LOCK = threading.RLock()
+MOVE_LOCK = threading.RLock()
+LOGGER = logging.getLogger("chiefmind.workflow")
 
 
 class WorkflowFileError(ValueError):
@@ -31,12 +34,20 @@ class WorkflowFileError(ValueError):
 
 
 def parse_frontmatter(
-    text: str,
+    value: str | Path,
     *,
     source: str = "<memory>",
     strip_body: bool = True,
 ) -> tuple[dict[str, Any], str]:
-    """Parse YAML frontmatter with SafeLoader and return metadata plus body."""
+    """Parse YAML frontmatter from text or a ``Path`` using SafeLoader."""
+    if isinstance(value, Path):
+        source = str(value)
+        try:
+            text = value.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise WorkflowFileError(f"Could not read {value}: {exc}") from exc
+    else:
+        text = value
     match = FRONTMATTER_PATTERN.match(text)
     if not match:
         raise WorkflowFileError(
@@ -55,11 +66,51 @@ def parse_frontmatter(
 
 
 def load_frontmatter_file(path: Path) -> tuple[dict[str, Any], str]:
+    """Compatibility wrapper for agents written before Path support."""
+    return parse_frontmatter(path)
+
+
+def write_frontmatter(path: Path, data: dict[str, Any], body: str = "") -> None:
+    """Safely serialize one Markdown artifact with an atomic replacement."""
+    if not isinstance(data, dict):
+        raise WorkflowFileError("Frontmatter data must be a mapping.")
     try:
-        content = path.read_text(encoding="utf-8")
-    except OSError as exc:
-        raise WorkflowFileError(f"Could not read {path}: {exc}") from exc
-    return parse_frontmatter(content, source=str(path))
+        yaml_text = yaml.safe_dump(
+            data,
+            allow_unicode=True,
+            default_flow_style=False,
+            sort_keys=False,
+        ).rstrip()
+    except yaml.YAMLError as exc:
+        raise WorkflowFileError(f"Could not serialize frontmatter: {exc}") from exc
+    normalized_body = body if not body or body.endswith("\n") else f"{body}\n"
+    atomic_write_text(path, f"---\n{yaml_text}\n---\n\n{normalized_body}")
+
+
+def move_file(src: Path, dst: Path, *, overwrite: bool = False) -> Path:
+    """Atomically move a file on one filesystem and return its final path.
+
+    If ``dst`` is an existing directory, the source filename is retained.
+    Cross-filesystem moves are rejected because copy/delete is not atomic.
+    """
+    source = Path(src)
+    destination = Path(dst)
+    if destination.is_dir():
+        destination = destination / source.name
+    with MOVE_LOCK:
+        if not source.is_file():
+            raise WorkflowFileError(f"Source file does not exist: {source}")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if destination.exists() and not overwrite:
+            raise WorkflowFileError(f"Destination already exists: {destination}")
+        try:
+            source.replace(destination)
+        except OSError as exc:
+            raise WorkflowFileError(
+                f"Could not atomically move {source} to {destination}: {exc}"
+            ) from exc
+    LOGGER.info("Moved workflow file %s to %s", source, destination)
+    return destination
 
 
 def atomic_write_text(path: Path, content: str) -> None:

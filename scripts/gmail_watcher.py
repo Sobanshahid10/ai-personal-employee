@@ -12,8 +12,8 @@ from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 from typing import Any, Callable, TypeVar
+import threading
 
 from googleapiclient.discovery import Resource, build
 from googleapiclient.errors import HttpError
@@ -35,6 +35,7 @@ from config import (
     save_processed_ids,
     setup_logging,
 )
+from workflow_utils import atomic_write_text
 
 
 LOGGER = setup_logging("chiefmind.gmail.watcher")
@@ -205,23 +206,7 @@ def _write_message_file(message: dict[str, Any]) -> Path:
     ensure_directories()
     message_id = str(message["id"])
     destination = NEEDS_ACTION_DIR / f"email_{message_id}.md"
-    temporary_path: Path | None = None
-    try:
-        with NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=NEEDS_ACTION_DIR,
-            prefix=f".{destination.name}.",
-            suffix=".tmp",
-            delete=False,
-        ) as temporary_file:
-            temporary_file.write(render_markdown(message))
-            temporary_path = Path(temporary_file.name)
-        temporary_path.replace(destination)
-    except OSError:
-        if temporary_path is not None:
-            temporary_path.unlink(missing_ok=True)
-        raise
+    atomic_write_text(destination, render_markdown(message))
     return destination
 
 
@@ -347,7 +332,11 @@ def poll_once(service: Resource) -> int:
     return completed
 
 
-def run_watcher(*, once: bool = False) -> int:
+def run_watcher(
+    *,
+    once: bool = False,
+    stop_event: threading.Event | None = None,
+) -> int:
     """Run the resilient polling loop; return only on --once or interruption."""
     LOGGER.info(
         "Starting Gmail watcher: query=%r interval=%ss max_results=%s",
@@ -357,7 +346,7 @@ def run_watcher(*, once: bool = False) -> int:
     )
     service: Resource | None = None
 
-    while True:
+    while not (stop_event and stop_event.is_set()):
         try:
             if service is None:
                 service = build_gmail_service()
@@ -375,7 +364,12 @@ def run_watcher(*, once: bool = False) -> int:
 
         if once:
             return 0
-        time.sleep(GMAIL_POLL_INTERVAL)
+        if stop_event:
+            stop_event.wait(GMAIL_POLL_INTERVAL)
+        else:
+            time.sleep(GMAIL_POLL_INTERVAL)
+    LOGGER.info("Gmail watcher received a graceful shutdown request.")
+    return 0
 
 
 def _parse_args() -> argparse.Namespace:

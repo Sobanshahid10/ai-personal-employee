@@ -1,0 +1,20 @@
+{
+  "name": "chiefmind-gmail-send-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Fail-closed MCP tool for sending Gmail messages with ChiefMind OAuth credentials.",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "check": "node --check index.js",
+    "test": "node --test index.test.js mcp.test.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "googleapis": "^173.0.0",
+    "zod": "^3.25.76"
+  }
+}

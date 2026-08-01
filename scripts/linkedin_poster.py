@@ -17,11 +17,16 @@ from pathlib import Path
 from typing import Any
 
 from config import (
+    AUTO_LINKEDIN_POSTS,
     LINKEDIN_ACCESS_TOKEN,
     LINKEDIN_API_VERSION,
     LINKEDIN_AUTHOR_URN,
     LINKEDIN_MODE,
+    LINKEDIN_EMAIL,
+    LINKEDIN_HEADLESS,
+    LINKEDIN_PASSWORD,
     LINKEDIN_REQUEST_TIMEOUT,
+    LINKEDIN_STORAGE_STATE_FILE,
     LOGS_DIR,
     setup_logging,
 )
@@ -144,6 +149,78 @@ def publish_live(
         raise LinkedInPosterError(f"LinkedIn API request failed: {exc}") from exc
 
 
+def post_to_linkedin_playwright(
+    content: str,
+    *,
+    email: str = LINKEDIN_EMAIL,
+    password: str = LINKEDIN_PASSWORD,
+    headless: bool = LINKEDIN_HEADLESS,
+    storage_state_file: Path = LINKEDIN_STORAGE_STATE_FILE,
+) -> bool:
+    """Publish through LinkedIn's UI as an explicitly enabled fallback.
+
+    LinkedIn can change this UI without notice. Official API mode is preferred.
+    Login challenges intentionally fail rather than attempting to bypass them.
+    """
+    if not email or not password:
+        raise LinkedInPosterError("LinkedIn browser mode credentials are missing.")
+    try:
+        from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+        from playwright.sync_api import sync_playwright
+    except ImportError as exc:
+        raise LinkedInPosterError(
+            "Playwright is not installed. Run `uv sync` and install Chromium."
+        ) from exc
+
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=headless)
+            context_options: dict[str, Any] = {}
+            if storage_state_file.is_file():
+                context_options["storage_state"] = str(storage_state_file)
+            context = browser.new_context(**context_options)
+            page = context.new_page()
+            page.goto("https://www.linkedin.com/feed/", wait_until="domcontentloaded")
+
+            if "/login" in page.url or page.locator("#username").count():
+                page.goto(
+                    "https://www.linkedin.com/login",
+                    wait_until="domcontentloaded",
+                )
+                page.locator("#username").fill(email)
+                page.locator("#password").fill(password)
+                page.locator('button[type="submit"]').click()
+                page.wait_for_url("**/feed/**", timeout=30_000)
+                storage_state_file.parent.mkdir(parents=True, exist_ok=True)
+                context.storage_state(path=str(storage_state_file))
+
+            if any(marker in page.url for marker in ("checkpoint", "challenge")):
+                raise LinkedInPosterError(
+                    "LinkedIn requires a manual security check; browser posting stopped."
+                )
+
+            start = page.get_by_role("button", name="Start a post", exact=True)
+            start.wait_for(state="visible", timeout=20_000)
+            start.click()
+            dialog = page.get_by_role("dialog")
+            editor = dialog.locator('[contenteditable="true"][role="textbox"]')
+            editor.wait_for(state="visible", timeout=10_000)
+            editor.fill(content)
+            post_button = dialog.get_by_role("button", name="Post", exact=True)
+            post_button.click()
+            dialog.wait_for(state="hidden", timeout=20_000)
+            browser.close()
+            return True
+    except PlaywrightTimeoutError as exc:
+        LOGGER.error("LinkedIn browser UI did not reach the expected state: %s", exc)
+        return False
+    except LinkedInPosterError:
+        raise
+    except Exception as exc:
+        LOGGER.error("LinkedIn browser posting failed: %s", exc)
+        return False
+
+
 def post_approved_artifact(
     path: Path,
     *,
@@ -162,10 +239,29 @@ def post_approved_artifact(
         }
         status = "linkedin_post_mocked"
     elif mode == "live":
+        if not AUTO_LINKEDIN_POSTS:
+            raise LinkedInPosterError(
+                "Live posting is disabled; set AUTO_LINKEDIN_POSTS=true explicitly."
+            )
         result = publish_live(content)
         status = "linkedin_posted"
+    elif mode == "browser":
+        if not AUTO_LINKEDIN_POSTS:
+            raise LinkedInPosterError(
+                "Browser posting is disabled; set AUTO_LINKEDIN_POSTS=true explicitly."
+            )
+        if not post_to_linkedin_playwright(content):
+            raise LinkedInPosterError("LinkedIn browser posting did not complete.")
+        result = {
+            "provider": "linkedin",
+            "mode": "browser",
+            "status_code": None,
+            "post_id": None,
+            "content_length": len(content),
+        }
+        status = "linkedin_posted"
     else:
-        raise LinkedInPosterError("Mode must be `mock` or `live`.")
+        raise LinkedInPosterError("Mode must be `mock`, `live`, or `browser`.")
 
     audit(
         {
@@ -188,7 +284,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--approval-file", required=True, type=Path)
     parser.add_argument(
         "--mode",
-        choices=("mock", "live"),
+        choices=("mock", "live", "browser"),
         help="Override LINKEDIN_MODE for this invocation.",
     )
     return parser.parse_args()

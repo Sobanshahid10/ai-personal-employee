@@ -24,6 +24,8 @@ __pycache__/
 **/__pycache__/
 *.py[cod]
 *.pyc
+node_modules/
+**/node_modules/
 
 # Runtime workflow data can contain private emails, drafts, and audit records.
 Inbox/*

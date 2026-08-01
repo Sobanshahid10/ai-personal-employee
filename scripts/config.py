@@ -175,11 +175,19 @@ LINKEDIN_EXECUTION_TIMEOUT = _int(
     "LINKEDIN_EXECUTION_TIMEOUT", 300, minimum=1
 )
 LINKEDIN_MODE = os.getenv("LINKEDIN_MODE", "mock").strip().lower()
-if LINKEDIN_MODE not in {"mock", "live"}:
-    raise ValueError("LINKEDIN_MODE must be 'mock' or 'live'.")
+if LINKEDIN_MODE not in {"mock", "live", "browser"}:
+    raise ValueError("LINKEDIN_MODE must be 'mock', 'live', or 'browser'.")
+AUTO_LINKEDIN_POSTS = _bool("AUTO_LINKEDIN_POSTS", False)
 LINKEDIN_ACCESS_TOKEN = os.getenv("LINKEDIN_ACCESS_TOKEN", "").strip()
 LINKEDIN_AUTHOR_URN = os.getenv("LINKEDIN_AUTHOR_URN", "").strip()
 LINKEDIN_API_VERSION = os.getenv("LINKEDIN_API_VERSION", "202607").strip()
+LINKEDIN_EMAIL = os.getenv("LINKEDIN_EMAIL", "").strip()
+LINKEDIN_PASSWORD = os.getenv("LINKEDIN_PASSWORD", "").strip()
+LINKEDIN_HEADLESS = _bool("LINKEDIN_HEADLESS", True)
+LINKEDIN_STORAGE_STATE_FILE = _path(
+    "LINKEDIN_STORAGE_STATE_FILE",
+    CREDENTIALS_DIR / "linkedin_storage_state.json",
+)
 LINKEDIN_REQUEST_TIMEOUT = _int(
     "LINKEDIN_REQUEST_TIMEOUT", 30, minimum=1
 )
@@ -244,11 +252,20 @@ def validate_config(*, strict: bool = False) -> list[str]:
         issues.append("GROQ_API_KEY is not set.")
     if not DASHBOARD_APPROVAL_TOKEN:
         issues.append("DASHBOARD_APPROVAL_TOKEN is not set.")
+    if LINKEDIN_MODE in {"live", "browser"} and not AUTO_LINKEDIN_POSTS:
+        issues.append(
+            "AUTO_LINKEDIN_POSTS must be true for live or browser LinkedIn mode."
+        )
     if LINKEDIN_MODE == "live":
         if not LINKEDIN_ACCESS_TOKEN:
             issues.append("LINKEDIN_ACCESS_TOKEN is required in live mode.")
         if not LINKEDIN_AUTHOR_URN:
             issues.append("LINKEDIN_AUTHOR_URN is required in live mode.")
+    if LINKEDIN_MODE == "browser":
+        if not LINKEDIN_EMAIL:
+            issues.append("LINKEDIN_EMAIL is required in browser mode.")
+        if not LINKEDIN_PASSWORD:
+            issues.append("LINKEDIN_PASSWORD is required in browser mode.")
 
     if strict and issues:
         formatted = "\n".join(f"- {issue}" for issue in issues)

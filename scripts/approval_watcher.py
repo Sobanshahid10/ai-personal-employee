@@ -44,6 +44,7 @@ from workflow_utils import (
     atomic_write_json,
     load_frontmatter_file,
     load_json_object,
+    move_file,
 )
 
 
@@ -268,7 +269,7 @@ def route_file(path: Path, destination_dir: Path) -> Path:
             f"{path.stem}_{utc_now().strftime('%Y%m%dT%H%M%S%fZ')}_"
             f"{uuid.uuid4().hex[:8]}{path.suffix}"
         )
-    return path.replace(destination)
+    return move_file(path, destination)
 
 
 def wait_until_stable(path: Path) -> None:
@@ -484,7 +485,7 @@ def process_existing(
     return counts
 
 
-def watch() -> None:
+def watch(stop_event: threading.Event | None = None) -> None:
     ensure_directories()
     initialize_execution_files()
     sender = GmailDirectSender()
@@ -499,8 +500,10 @@ def watch() -> None:
     try:
         counts = process_existing(sender)
         LOGGER.info("Startup approval scan: %s", counts)
-        while True:
-            time.sleep(1)
+        while not (stop_event and stop_event.wait(1)):
+            if stop_event is None:
+                time.sleep(1)
+        LOGGER.info("Approval watcher received a graceful shutdown request.")
     except KeyboardInterrupt:
         LOGGER.info("Approval watcher stopped by user.")
     finally:
