@@ -1,0 +1,20 @@
+[Unit]
+Description=ChiefMind Flask workflow dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory="__VAULT_DIR__/dashboard"
+Environment="CHIEFMIND_ROOT=__VAULT_DIR__"
+Environment=PYTHONUNBUFFERED=1
+ExecStart="__VAULT_DIR__/scripts/.venv/bin/python" "__VAULT_DIR__/dashboard/app.py"
+Restart=always
+RestartSec=10
+KillSignal=SIGINT
+TimeoutStopSec=30
+StandardOutput="append:__VAULT_DIR__/Logs/dashboard.stdout.log"
+StandardError="append:__VAULT_DIR__/Logs/dashboard.stderr.log"
+
+[Install]
+WantedBy=default.target

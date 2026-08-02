@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.chiefmind.approvalwatcher</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__VAULT_DIR__/scripts/.venv/bin/python</string>
+    <string>__VAULT_DIR__/scripts/approval_watcher.py</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>__VAULT_DIR__/scripts</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>CHIEFMIND_ROOT</key>
+    <string>__VAULT_DIR__</string>
+    <key>PYTHONUNBUFFERED</key>
+    <string>1</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>Umask</key>
+  <integer>63</integer>
+
+  <key>StandardOutPath</key>
+  <string>__VAULT_DIR__/Logs/approvalwatcher.stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>__VAULT_DIR__/Logs/approvalwatcher.stderr.log</string>
+</dict>
+</plist>
