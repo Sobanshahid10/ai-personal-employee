@@ -161,7 +161,7 @@ GMAIL_SCOPES = tuple(
     ).split(",")
     if scope.strip()
 )
-GMAIL_POLL_INTERVAL = _int("GMAIL_POLL_INTERVAL", 120, minimum=1)
+GMAIL_POLL_INTERVAL = _int("GMAIL_POLL_INTERVAL", 120, minimum=60)
 GMAIL_RETRIES = _int("GMAIL_RETRIES", 3, minimum=0)
 GMAIL_RETRY_DELAY = _int("GMAIL_RETRY_DELAY", 5, minimum=0)
 GMAIL_MAX_RESULTS = _int("GMAIL_MAX_RESULTS", 100, minimum=1)
@@ -190,6 +190,18 @@ LINKEDIN_STORAGE_STATE_FILE = _path(
 )
 LINKEDIN_REQUEST_TIMEOUT = _int(
     "LINKEDIN_REQUEST_TIMEOUT", 30, minimum=1
+)
+
+# Fail-closed execution limits. Use `--once` for fast development checks rather
+# than weakening the Gmail polling floor or production action thresholds.
+MAX_EMAIL_SENDS_PER_HOUR = _int(
+    "MAX_EMAIL_SENDS_PER_HOUR", 10, minimum=1
+)
+MAX_EXTERNAL_ACTIONS_PER_DAY = _int(
+    "MAX_EXTERNAL_ACTIONS_PER_DAY", 50, minimum=1
+)
+MAX_LINKEDIN_POSTS_PER_DAY = _int(
+    "MAX_LINKEDIN_POSTS_PER_DAY", 3, minimum=1
 )
 
 DASHBOARD_HOST = os.getenv("DASHBOARD_HOST", "127.0.0.1").strip()

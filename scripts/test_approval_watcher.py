@@ -6,6 +6,7 @@ import hashlib
 import json
 import tempfile
 import unittest
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -187,6 +188,25 @@ class ApprovalWatcherTests(unittest.TestCase):
         self.assertEqual(result, "executed")
         self.assertEqual(sender.calls, [])
         self.assertTrue((self.done / path.name).is_file())
+
+    def test_email_rate_limit_fails_closed(self) -> None:
+        atomic_receipt = {
+            "email_previous": {
+                "state": "executed",
+                "type": "email_send",
+                "executed_at": datetime.now(tz=UTC).isoformat(),
+            }
+        }
+        self.receipts.write_text(json.dumps(atomic_receipt), encoding="utf-8")
+        path = self.write_email(action_id="email_rate_limited")
+        sender = FakeEmailSender()
+
+        with patch.object(approval_watcher, "MAX_EMAIL_SENDS_PER_HOUR", 1):
+            result = approval_watcher.process_approval(path, gmail_sender=sender)
+
+        self.assertEqual(result, "failed")
+        self.assertEqual(sender.calls, [])
+        self.assertTrue((self.failed / path.name).is_file())
 
 
 if __name__ == "__main__":

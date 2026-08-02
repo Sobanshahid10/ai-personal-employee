@@ -35,6 +35,9 @@ from config import (
     LINKEDIN_EXECUTION_TIMEOUT,
     LINKEDIN_POSTER_FILE,
     LOGS_DIR,
+    MAX_EMAIL_SENDS_PER_HOUR,
+    MAX_EXTERNAL_ACTIONS_PER_DAY,
+    MAX_LINKEDIN_POSTS_PER_DAY,
     ensure_directories,
     setup_logging,
 )
@@ -113,6 +116,69 @@ def load_receipts() -> dict[str, Any]:
 
 def save_receipts(receipts: dict[str, Any]) -> None:
     atomic_write_json(EXECUTION_RECEIPTS_FILE, receipts)
+
+
+def _receipt_timestamp(receipt: dict[str, Any]) -> datetime | None:
+    """Return the earliest safety-relevant reservation/completion time."""
+    for field in ("reserved_at", "executed_at", "failed_at"):
+        value = receipt.get(field)
+        if not isinstance(value, str):
+            continue
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(UTC)
+        except ValueError:
+            continue
+    return None
+
+
+def enforce_rate_limits(
+    receipts: dict[str, Any],
+    action_type: str,
+    *,
+    now: datetime | None = None,
+) -> None:
+    """Fail closed before external I/O when configured limits are reached."""
+    if action_type not in EMAIL_TYPES | {"linkedin_post"}:
+        return
+    current = (now or utc_now()).astimezone(UTC)
+    day_start = current.replace(hour=0, minute=0, second=0, microsecond=0)
+    hour_start = current.replace(minute=0, second=0, microsecond=0)
+    recent: list[tuple[str, datetime]] = []
+    for receipt in receipts.values():
+        if not isinstance(receipt, dict):
+            continue
+        timestamp = _receipt_timestamp(receipt)
+        receipt_type = str(receipt.get("type", ""))
+        if timestamp is not None:
+            recent.append((receipt_type, timestamp))
+
+    external_today = sum(
+        receipt_type in EMAIL_TYPES | {"linkedin_post"}
+        and timestamp >= day_start
+        for receipt_type, timestamp in recent
+    )
+    if external_today >= MAX_EXTERNAL_ACTIONS_PER_DAY:
+        raise ActionExecutionError(
+            f"Daily external-action limit reached ({MAX_EXTERNAL_ACTIONS_PER_DAY})."
+        )
+    if action_type in EMAIL_TYPES:
+        emails_this_hour = sum(
+            receipt_type in EMAIL_TYPES and timestamp >= hour_start
+            for receipt_type, timestamp in recent
+        )
+        if emails_this_hour >= MAX_EMAIL_SENDS_PER_HOUR:
+            raise ActionExecutionError(
+                f"Hourly email limit reached ({MAX_EMAIL_SENDS_PER_HOUR})."
+            )
+    if action_type == "linkedin_post":
+        linkedin_today = sum(
+            receipt_type == "linkedin_post" and timestamp >= day_start
+            for receipt_type, timestamp in recent
+        )
+        if linkedin_today >= MAX_LINKEDIN_POSTS_PER_DAY:
+            raise ActionExecutionError(
+                f"Daily LinkedIn limit reached ({MAX_LINKEDIN_POSTS_PER_DAY})."
+            )
 
 
 def validate_approval(path: Path) -> dict[str, Any]:
@@ -367,6 +433,8 @@ def process_approval(
                 )
                 route_file(path, DONE_DIR)
                 return "duplicate"
+
+            enforce_rate_limits(receipts, action_type)
 
             append_audit_event(
                 _event(
