@@ -64,6 +64,18 @@ Before any LLM call it checks `action_id` across `Pending_Approval/`,
 `Approved/`, and `Done/`. The approval artifact includes an integrity hash for
 the immutable `draft_body`.
 
+## Job search agent
+
+| Field | Contract |
+| --- | --- |
+| Trigger | Supervisor startup when `JOB_SEARCH_ENABLED=true`; repeats every `JOB_SEARCH_INTERVAL` seconds |
+| Input | Public remote-job feeds and private `credentials/candidate_profile.json` |
+| Output | Scored `Needs_Action/job_<id>.md` leads and `Logs/job_seen_ids.json` |
+| What it does | Requires a target technical title, scores verified skill overlap, rejects senior/unrelated/foreign on-site roles, and stages auditable application links |
+
+It never invents salary, sponsorship, or legal answers. External application
+submission requires an approved packet and a source-specific execution adapter.
+
 ## Knowledge retriever
 
 | Field | Contract |
@@ -156,6 +168,7 @@ approval artifact and receipt workflow.
 | LinkedIn poster | Per approved `linkedin_post` | Approval watcher subprocess |
 | Gmail MCP | On demand in development only | MCP host |
 | Pipeline tests | Before deployment/change; no schedule by default | Operator/CI |
+| Job search agent | Every 6 hours by default when enabled | Unified supervisor |
 
 ## Shared configuration constants
 

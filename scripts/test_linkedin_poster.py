@@ -16,6 +16,7 @@ from linkedin_poster import (  # noqa: E402
     LinkedInPosterError,
     linkedin_payload,
     post_approved_artifact,
+    post_to_linkedin_playwright,
     read_approved_post,
 )
 
@@ -70,6 +71,18 @@ post_body: |
         )
         self.assertEqual(payload["commentary"], "Approved text")
         self.assertEqual(payload["lifecycleState"], "PUBLISHED")
+
+    def test_browser_mode_requires_session_instead_of_password_storage(self) -> None:
+        with self.assertRaisesRegex(
+            LinkedInPosterError,
+            "setup-browser-session",
+        ):
+            post_to_linkedin_playwright(
+                "Approved text",
+                email="sobanshahid25@gmail.com",
+                password="",
+                storage_state_file=self.root / "missing-session.json",
+            )
 
 
 if __name__ == "__main__":

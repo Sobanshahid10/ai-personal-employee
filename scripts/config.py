@@ -138,6 +138,10 @@ LOG_FILE = _path("LOG_FILE", LOGS_DIR / "agent.log")
 EXECUTION_RECEIPTS_FILE = _path(
     "EXECUTION_RECEIPTS_FILE", LOGS_DIR / "execution_receipts.json"
 )
+CANDIDATE_PROFILE_FILE = _path(
+    "CANDIDATE_PROFILE_FILE", CREDENTIALS_DIR / "candidate_profile.json"
+)
+JOB_SEEN_IDS_FILE = _path("JOB_SEEN_IDS_FILE", LOGS_DIR / "job_seen_ids.json")
 LINKEDIN_POSTER_FILE = _path(
     "LINKEDIN_POSTER_FILE", SCRIPTS_DIR / "linkedin_poster.py"
 )
@@ -191,6 +195,10 @@ LINKEDIN_STORAGE_STATE_FILE = _path(
 LINKEDIN_REQUEST_TIMEOUT = _int(
     "LINKEDIN_REQUEST_TIMEOUT", 30, minimum=1
 )
+JOB_SEARCH_ENABLED = _bool("JOB_SEARCH_ENABLED", False)
+JOB_SEARCH_INTERVAL = _int("JOB_SEARCH_INTERVAL", 21_600, minimum=900)
+JOB_MIN_SCORE = _int("JOB_MIN_SCORE", 45, minimum=1)
+JOB_MAX_RESULTS = _int("JOB_MAX_RESULTS", 20, minimum=1)
 
 # Fail-closed execution limits. Use `--once` for fast development checks rather
 # than weakening the Gmail polling floor or production action thresholds.
@@ -276,8 +284,12 @@ def validate_config(*, strict: bool = False) -> list[str]:
     if LINKEDIN_MODE == "browser":
         if not LINKEDIN_EMAIL:
             issues.append("LINKEDIN_EMAIL is required in browser mode.")
-        if not LINKEDIN_PASSWORD:
-            issues.append("LINKEDIN_PASSWORD is required in browser mode.")
+        if not LINKEDIN_STORAGE_STATE_FILE.is_file() and not LINKEDIN_PASSWORD:
+            issues.append(
+                "LinkedIn browser mode requires a saved session or "
+                "LINKEDIN_PASSWORD. Run linkedin_poster.py "
+                "--setup-browser-session to avoid storing a password."
+            )
 
     if strict and issues:
         formatted = "\n".join(f"- {issue}" for issue in issues)

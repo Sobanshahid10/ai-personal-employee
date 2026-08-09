@@ -301,8 +301,16 @@ def build_gmail_service() -> Resource:
     return build("gmail", "v1", credentials=credentials, cache_discovery=False)
 
 
-def poll_once(service: Resource) -> int:
-    """Process one Gmail query result and return the number of new messages."""
+def poll_once(
+    service: Resource,
+    *,
+    stop_event: threading.Event | None = None,
+) -> int:
+    """Process one Gmail query result and return the number staged.
+
+    The shared shutdown event is checked between messages so a large Gmail
+    result cannot delay supervisor shutdown for an entire batch.
+    """
     processed_ids = load_processed_ids()
     candidate_ids = _list_message_ids(service)
     new_ids = [message_id for message_id in candidate_ids if message_id not in processed_ids]
@@ -314,6 +322,12 @@ def poll_once(service: Resource) -> int:
 
     completed = 0
     for message_id in new_ids:
+        if stop_event and stop_event.is_set():
+            LOGGER.info(
+                "Gmail shutdown requested; leaving %s message(s) for the next poll.",
+                len(new_ids) - completed,
+            )
+            break
         try:
             message = _get_message(service, message_id)
             destination = _write_message_file(message)
@@ -327,7 +341,8 @@ def poll_once(service: Resource) -> int:
                 "Failed to process Gmail message %s; continuing.", message_id
             )
 
-    if completed:
+    # Do not start a potentially long LLM subprocess while shutting down.
+    if completed and not (stop_event and stop_event.is_set()):
         trigger_reasoning_loop()
     return completed
 
@@ -350,7 +365,7 @@ def run_watcher(
         try:
             if service is None:
                 service = build_gmail_service()
-            poll_once(service)
+            poll_once(service, stop_event=stop_event)
         except GmailAuthenticationError as exc:
             LOGGER.error("%s", exc)
             service = None

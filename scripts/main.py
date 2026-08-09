@@ -15,6 +15,7 @@ from werkzeug.serving import BaseWSGIServer, make_server
 import config
 from approval_watcher import watch as watch_approvals
 from gmail_watcher import run_watcher as watch_gmail
+from job_search_agent import run_job_search
 
 
 # scripts/main.py starts with scripts/ on sys.path; add only the project root so
@@ -69,6 +70,8 @@ class ChiefMindRuntime:
             "gmail_watcher": lambda event: watch_gmail(stop_event=event),
             "dashboard": self._dashboard,
         }
+        if self.services is None and config.JOB_SEARCH_ENABLED:
+            services["job_search_agent"] = lambda event: run_job_search(event)
         for name, worker in services.items():
             thread = threading.Thread(
                 target=self._guard,
@@ -110,6 +113,10 @@ def validate_runtime() -> None:
     if not config.GOOGLE_TOKEN_FILE.is_file():
         raise config.ConfigError(
             "Missing Gmail token.json. Run scripts/authenticate_gmail.py first."
+        )
+    if config.JOB_SEARCH_ENABLED and not config.CANDIDATE_PROFILE_FILE.is_file():
+        raise config.ConfigError(
+            f"Missing candidate profile: {config.CANDIDATE_PROFILE_FILE}"
         )
     config.ensure_directories()
 

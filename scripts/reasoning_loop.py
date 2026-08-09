@@ -596,6 +596,13 @@ def run_once(client: Groq | None = None, *, limit: int | None = None) -> int:
             _quarantine_malformed(path, exc)
             continue
 
+        if str(item.metadata.get("type", "email")).lower() != "email":
+            LOGGER.debug(
+                "Leaving non-email item %s for its specialized agent.",
+                item.action_id,
+            )
+            continue
+
         if item.action_id in guarded_ids:
             LOGGER.info(
                 "Skipping duplicate action_id %s from %s",

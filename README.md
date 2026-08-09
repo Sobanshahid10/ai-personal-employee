@@ -46,6 +46,7 @@ but only a human can move its immutable artifact into `Approved/`.
 | Rate protection | Enforces hourly email and daily external-action/LinkedIn limits |
 | Dashboard | Shows KPIs, queues, file details, activity logs, and approval actions |
 | LinkedIn | Safe mock mode, official Posts API mode, and an explicitly gated browser fallback |
+| Job discovery | Finds and scores remote/Pakistan junior technical roles while rejecting unrelated and senior listings |
 | Local MCP tool | Exposes a disabled-by-default Gmail send tool for development—not production execution |
 | Supervision | Runs interactively through `main.py` or continuously through launchd/systemd |
 | Auditability | Writes rotating agent logs, dated JSON events, and durable execution receipts |
@@ -73,6 +74,7 @@ chiefmind/
 │   ├── knowledge.py
 │   ├── approval_watcher.py
 │   ├── linkedin_poster.py
+│   ├── job_search_agent.py
 │   ├── workflow_utils.py
 │   ├── main.py
 │   ├── test_pipeline.py

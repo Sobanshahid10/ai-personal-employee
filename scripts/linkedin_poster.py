@@ -162,8 +162,12 @@ def post_to_linkedin_playwright(
     LinkedIn can change this UI without notice. Official API mode is preferred.
     Login challenges intentionally fail rather than attempting to bypass them.
     """
-    if not email or not password:
-        raise LinkedInPosterError("LinkedIn browser mode credentials are missing.")
+    if not storage_state_file.is_file() and (not email or not password):
+        raise LinkedInPosterError(
+            "No LinkedIn browser session is configured. Run "
+            "`python linkedin_poster.py --setup-browser-session` for a "
+            "one-time interactive login; storing a password is not required."
+        )
     try:
         from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
         from playwright.sync_api import sync_playwright
@@ -183,6 +187,11 @@ def post_to_linkedin_playwright(
             page.goto("https://www.linkedin.com/feed/", wait_until="domcontentloaded")
 
             if "/login" in page.url or page.locator("#username").count():
+                if not email or not password:
+                    raise LinkedInPosterError(
+                        "The saved LinkedIn session expired. Run "
+                        "`python linkedin_poster.py --setup-browser-session` again."
+                    )
                 page.goto(
                     "https://www.linkedin.com/login",
                     wait_until="domcontentloaded",
@@ -219,6 +228,64 @@ def post_to_linkedin_playwright(
     except Exception as exc:
         LOGGER.error("LinkedIn browser posting failed: %s", exc)
         return False
+
+
+def setup_browser_session(
+    *,
+    email: str = LINKEDIN_EMAIL,
+    storage_state_file: Path = LINKEDIN_STORAGE_STATE_FILE,
+    timeout_ms: int = 600_000,
+) -> Path:
+    """Open LinkedIn for a human login and save reusable local session state."""
+    try:
+        from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+        from playwright.sync_api import sync_playwright
+    except ImportError as exc:
+        raise LinkedInPosterError(
+            "Playwright is not installed. Run `uv sync` and install Chromium."
+        ) from exc
+
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=False)
+            context = browser.new_context()
+            page = context.new_page()
+            page.goto(
+                "https://www.linkedin.com/login",
+                wait_until="domcontentloaded",
+            )
+            if email and page.locator("#username").count():
+                page.locator("#username").fill(email)
+
+            print(
+                "Complete LinkedIn sign-in in the opened Chromium window. "
+                "ChiefMind will save the session after the feed loads."
+            )
+            page.wait_for_url("**/feed/**", timeout=timeout_ms)
+            if any(marker in page.url for marker in ("checkpoint", "challenge")):
+                raise LinkedInPosterError(
+                    "Complete LinkedIn's security check before saving the session."
+                )
+            page.get_by_role("button", name="Start a post", exact=True).wait_for(
+                state="visible",
+                timeout=30_000,
+            )
+            storage_state_file.parent.mkdir(parents=True, exist_ok=True)
+            context.storage_state(path=str(storage_state_file))
+            try:
+                storage_state_file.chmod(0o600)
+            except OSError:
+                LOGGER.warning(
+                    "Could not restrict permissions on %s.", storage_state_file
+                )
+            browser.close()
+    except PlaywrightTimeoutError as exc:
+        raise LinkedInPosterError(
+            "LinkedIn login did not complete before the setup timeout."
+        ) from exc
+
+    LOGGER.info("Saved LinkedIn browser session to %s", storage_state_file)
+    return storage_state_file
 
 
 def post_approved_artifact(
@@ -281,7 +348,12 @@ def post_approved_artifact(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--approval-file", required=True, type=Path)
+    parser.add_argument("--approval-file", type=Path)
+    parser.add_argument(
+        "--setup-browser-session",
+        action="store_true",
+        help="Open a one-time manual login and save a local Playwright session.",
+    )
     parser.add_argument(
         "--mode",
         choices=("mock", "live", "browser"),
@@ -292,6 +364,21 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    if args.setup_browser_session:
+        try:
+            path = setup_browser_session()
+            print(f"LinkedIn browser session ready: {path}")
+            return 0
+        except Exception as exc:
+            LOGGER.exception("LinkedIn browser session setup failed.")
+            print(str(exc), file=sys.stderr)
+            return 1
+    if args.approval_file is None:
+        print(
+            "--approval-file is required unless --setup-browser-session is used.",
+            file=sys.stderr,
+        )
+        return 2
     mode = args.mode or LINKEDIN_MODE
     try:
         result = post_approved_artifact(args.approval_file, mode=mode)
