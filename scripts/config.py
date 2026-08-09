@@ -94,6 +94,11 @@ REJECTED_DIR = _path("REJECTED_DIR", PROJECT_ROOT / "Rejected")
 DONE_DIR = _path("DONE_DIR", PROJECT_ROOT / "Done")
 FAILED_DIR = _path("FAILED_DIR", PROJECT_ROOT / "Failed")
 LOGS_DIR = _path("LOGS_DIR", PROJECT_ROOT / "Logs")
+DIGESTS_DIR = _path("DIGESTS_DIR", LOGS_DIR / "digests")
+DECISIONS_DIR = _path("DECISIONS_DIR", LOGS_DIR / "decisions")
+OPERATOR_POLICY_FILE = _path(
+    "OPERATOR_POLICY_FILE", CREDENTIALS_DIR / "operator_policy.yaml"
+)
 
 WORKFLOW_DIRS = (
     INBOX_DIR,
@@ -250,6 +255,8 @@ def ensure_directories() -> None:
         LAUNCHD_DIR,
         CREDENTIALS_DIR,
         *WORKFLOW_DIRS,
+        DIGESTS_DIR,
+        DECISIONS_DIR,
     )
     for directory in directories:
         directory.mkdir(parents=True, exist_ok=True)

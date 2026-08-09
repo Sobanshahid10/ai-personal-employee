@@ -6,6 +6,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from dashboard.app import create_app
 
@@ -31,7 +32,14 @@ class DashboardAPITests(unittest.TestCase):
             path.mkdir()
         self.logs = self.root / "Logs"
         self.logs.mkdir()
+        self.digests = self.logs / "digests"
+        self.digests.mkdir()
         self.agent_log = self.logs / "agent.log"
+        self.digest_patcher = patch(
+            "autonomy.DIGESTS_DIR",
+            self.digests,
+        )
+        self.digest_patcher.start()
         self.app = create_app(
             folder_keys=self.folder_keys,
             logs_dir=self.logs,
@@ -42,6 +50,7 @@ class DashboardAPITests(unittest.TestCase):
         self.client = self.app.test_client()
 
     def tearDown(self) -> None:
+        self.digest_patcher.stop()
         self.temp.cleanup()
 
     def write_item(
@@ -214,6 +223,32 @@ Markdown body.
             "X-Approval-Token",
             response.headers["Access-Control-Allow-Headers"],
         )
+
+    def test_digest_returns_today_entries(self) -> None:
+        from datetime import datetime, timezone
+
+        day = datetime.now(tz=timezone.utc).date().isoformat()
+        (self.digests / f"{day}.jsonl").write_text(
+            json.dumps(
+                {
+                    "action_id": "email_digest",
+                    "subject": "CI passed",
+                    "summary": "Routine workflow notification.",
+                    "classifications": ["INFORMATION_ONLY"],
+                    "timestamp": f"{day}T10:00:00Z",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        response = self.client.get("/api/digest")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["count"], 1)
+        self.assertEqual(payload["entries"][0]["action_id"], "email_digest")
+        self.assertIn("Handled 1 item", payload["batch_summary"])
 
     def test_root_serves_dashboard_frontend(self) -> None:
         response = self.client.get("/")

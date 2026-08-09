@@ -39,15 +39,27 @@ from config import (
     PLANS_DIR,
     REASONING_MAX_TOKENS,
     REASONING_TOP_K,
+    REJECTED_DIR,
     ensure_directories,
     setup_logging,
+)
+from autonomy import (
+    AutonomyError,
+    EventAssessment,
+    FinalDecision,
+    OperatorPolicy,
+    append_decision_record,
+    append_digest_entry,
+    load_operator_policy,
+    parse_event_assessment,
+    policy_prompt_excerpt,
+    resolve_autonomy_mode,
 )
 from knowledge import retrieve_relevant_sections
 
 
 LOGGER = setup_logging("chiefmind.reasoning")
 T = TypeVar("T")
-VALID_ACTION_TYPES = {"email_send", "manual"}
 VALID_PRIORITIES = {"high", "medium", "low"}
 FRONTMATTER_PATTERN = re.compile(
     r"\A---[ \t]*\r?\n(?P<yaml>.*?)\r?\n---[ \t]*(?:\r?\n|$)(?P<body>.*)\Z",
@@ -118,12 +130,49 @@ class SourceItem:
 
 @dataclass(frozen=True)
 class Decision:
+    """Legacy plan metadata derived from autonomy assessment."""
+
     action_type: str
-    informational: bool
     priority: str
     category: str
     summary: str
     steps: tuple[str, ...]
+
+
+def _priority_from_importance(importance: str) -> str:
+    mapping = {
+        "critical": "high",
+        "high": "high",
+        "moderate": "medium",
+        "low": "low",
+        "trivial": "low",
+    }
+    return mapping.get(importance, "medium")
+
+
+def _category_from_classifications(classifications: tuple[str, ...]) -> str:
+    if not classifications:
+        return "general"
+    primary = classifications[0].lower()
+    return re.sub(r"[^a-z0-9]+", "_", primary).strip("_") or "general"
+
+
+def _decision_from_assessment(assessment: EventAssessment) -> Decision:
+    action_type = (
+        "email_send"
+        if assessment.reply_intent == "required"
+        or "EXTERNAL_COMMUNICATION" in assessment.classifications
+        else "manual"
+    )
+    return Decision(
+        action_type=action_type,
+        priority=_priority_from_importance(assessment.importance),
+        category=_category_from_classifications(assessment.classifications),
+        summary=assessment.summary,
+        steps=assessment.steps
+        if assessment.steps
+        else ("Review the prepared recommendation.",),
+    )
 
 
 def utc_now() -> datetime:
@@ -225,7 +274,7 @@ def _artifact_action_id(path: Path) -> str | None:
 def collect_guarded_action_ids() -> set[str]:
     """Collect immutable/active action IDs from every guarded workflow state."""
     guarded_ids: set[str] = set()
-    for directory in (PENDING_APPROVAL_DIR, APPROVED_DIR, DONE_DIR):
+    for directory in (PENDING_APPROVAL_DIR, APPROVED_DIR, REJECTED_DIR, DONE_DIR):
         for path in sorted(directory.glob("*.md")):
             action_id = _artifact_action_id(path)
             if action_id:
@@ -285,20 +334,36 @@ def _parse_json_response(content: str) -> dict[str, Any]:
     return value
 
 
-def classify_item(client: Groq, item: SourceItem) -> Decision:
-    """Ask Groq for a constrained, machine-validated workflow decision."""
-    system_prompt = """You classify inbound items for ChiefMind.
+def assess_event(
+    client: Groq,
+    item: SourceItem,
+    policy: OperatorPolicy,
+) -> EventAssessment:
+    """Ask Groq for a constrained autonomy assessment (policy engine decides final mode)."""
+    system_prompt = """You assess inbound work for ChiefMind, an autonomous personal employee.
 Return ONLY a JSON object with exactly these keys:
-- action_type: "email_send" when a reply should be drafted, otherwise "manual"
-- informational: true only when no reply and no human action is needed
-- priority: "high", "medium", or "low"
-- category: short lowercase snake_case label
-- summary: concise factual summary
-- steps: array of 2-5 concrete next-step strings
+- action_required: boolean — false when no response, task, or decision is truly needed
+- classifications: non-empty array of one or more of:
+  INFORMATION_ONLY, ROUTINE_ACTION, USER_ACTION_REQUIRED, DECISION_REQUIRED,
+  EXTERNAL_COMMUNICATION, FINANCIAL_ACTION, SECURITY_ACTION, IRREVERSIBLE_ACTION, CRITICAL_EVENT
+- reply_intent: "none", "optional", or "required"
+- confidence: "low", "medium", or "high" (understanding and appropriate handling)
+- importance: "trivial", "low", "moderate", "high", or "critical"
+- risk: "low", "moderate", "high", or "critical" (damage from a wrong autonomous action)
+- reversibility: "REVERSIBLE", "PARTIALLY_REVERSIBLE", or "IRREVERSIBLE"
+- recommended_autonomy_mode: one of AUTO_EXECUTE, AUTO_EXECUTE_AND_SUMMARIZE,
+  HOLD_AND_SUMMARIZE, ASK_USER, ESCALATE (hint only; policy engine decides)
+- summary: concise factual summary (1-2 sentences)
+- steps: array of 0-5 concrete next-step strings (required when reply_intent is "required")
 
-Never claim an action was executed. Use manual for legal, security, financial,
-ambiguous, or non-email work that requires human judgment."""
+Rules:
+- Do not treat marketing words like "urgent" as proof of importance.
+- Automated notifications and logs are often INFORMATION_ONLY or ROUTINE_ACTION with
+  action_required false and reply_intent "none".
+- EXTERNAL_COMMUNICATION applies when a human-visible reply may be needed.
+- Never claim an action was executed."""
     user_prompt = (
+        f"Operator policy excerpt:\n{policy_prompt_excerpt(policy)}\n\n"
         f"Source metadata:\n{json.dumps(item.metadata, ensure_ascii=False, default=str)}"
         f"\n\nSource body:\n{item.body or '(empty body)'}"
     )
@@ -314,50 +379,20 @@ ambiguous, or non-email work that requires human judgment."""
             max_tokens=REASONING_MAX_TOKENS,
             response_format={"type": "json_object"},
         ),
-        "Groq classification",
+        "Groq event assessment",
     )
     data = _parse_json_response(_response_text(response))
+    try:
+        return parse_event_assessment(data)
+    except AutonomyError as exc:
+        raise LLMResponseError(str(exc)) from exc
 
-    action_type = str(data.get("action_type", "")).strip().lower()
-    if action_type not in VALID_ACTION_TYPES:
-        raise LLMResponseError(
-            f"Unsupported action_type {action_type!r}; expected email_send or manual."
-        )
-    informational = data.get("informational")
-    if not isinstance(informational, bool):
-        raise LLMResponseError("Classification `informational` must be boolean.")
-    if informational and action_type != "manual":
-        raise LLMResponseError("Informational items must use action_type `manual`.")
 
-    priority = str(data.get("priority", "")).strip().lower()
-    if priority not in VALID_PRIORITIES:
-        raise LLMResponseError(
-            f"Unsupported priority {priority!r}; expected high, medium, or low."
-        )
-    category = str(data.get("category", "")).strip().lower()
-    category = re.sub(r"[^a-z0-9]+", "_", category).strip("_")
-    if not category:
-        raise LLMResponseError("Classification requires a non-empty category.")
-    summary = str(data.get("summary", "")).strip()
-    if not summary:
-        raise LLMResponseError("Classification requires a non-empty summary.")
-    raw_steps = data.get("steps")
-    if (
-        not isinstance(raw_steps, list)
-        or not 2 <= len(raw_steps) <= 5
-        or not all(isinstance(step, str) and step.strip() for step in raw_steps)
-    ):
-        raise LLMResponseError(
-            "Classification `steps` must contain 2-5 non-empty strings."
-        )
-    return Decision(
-        action_type=action_type,
-        informational=informational,
-        priority=priority,
-        category=category,
-        summary=summary,
-        steps=tuple(step.strip() for step in raw_steps),
-    )
+def classify_item(client: Groq, item: SourceItem) -> Decision:
+    """Compatibility wrapper returning plan fields from a live assessment."""
+    policy = load_operator_policy()
+    assessment = assess_event(client, item, policy)
+    return _decision_from_assessment(assessment)
 
 
 def draft_email(
@@ -423,6 +458,7 @@ def _reply_subject(subject: str) -> str:
 def _create_plan(
     item: SourceItem,
     decision: Decision,
+    final: FinalDecision,
     references: list[str],
     created_at: datetime,
 ) -> Path:
@@ -434,6 +470,8 @@ def _create_plan(
         "priority": decision.priority,
         "category": decision.category,
         "recommended_action": decision.action_type,
+        "autonomy_mode": final.autonomy_mode,
+        "classifications": list(final.classifications),
         "steps": list(decision.steps),
         "knowledge_references": references,
         "created_at": isoformat_utc(created_at),
@@ -446,6 +484,7 @@ def _create_plan(
 def _create_approval(
     item: SourceItem,
     decision: Decision,
+    final: FinalDecision,
     references: list[str],
     created_at: datetime,
     draft_body: str | None,
@@ -456,7 +495,13 @@ def _create_approval(
         "source_file": item.path.name,
         "priority": decision.priority,
         "category": decision.category,
+        "autonomy_mode": final.autonomy_mode,
+        "classifications": list(final.classifications),
+        "policy_rule_id": final.policy_rule_id,
     }
+    if final.autonomy_mode == "ESCALATE":
+        metadata["escalated"] = True
+        metadata["escalation_reason"] = final.reason
     if decision.action_type == "email_send":
         if draft_body is None:
             raise ReasoningError("email_send approval requires draft_body.")
@@ -482,6 +527,7 @@ def _create_approval(
             {
                 "summary": decision.summary,
                 "instructions": list(decision.steps),
+                "why_it_matters": final.reason,
             }
         )
     metadata["knowledge_references"] = references
@@ -492,14 +538,39 @@ def _create_approval(
     return path
 
 
-def _move_to_done(item: SourceItem) -> Path:
+def _relocate_source(
+    item: SourceItem,
+    *,
+    resolution: dict[str, Any],
+) -> Path:
+    """Write resolved source metadata to Done/ and remove Needs_Action copy."""
+    metadata = dict(item.metadata)
+    metadata.update(resolution)
+    metadata["status"] = "done"
+    metadata["resolved_at"] = isoformat_utc()
     destination = DONE_DIR / item.path.name
     if destination.exists():
         destination = DONE_DIR / (
             f"{item.path.stem}_{utc_now().strftime('%Y%m%dT%H%M%SZ')}"
             f"{item.path.suffix}"
         )
-    return Path(shutil.move(str(item.path), str(destination)))
+    atomic_write(destination, dump_frontmatter(metadata, item.body))
+    item.path.unlink(missing_ok=True)
+    return destination
+
+
+def _move_to_done(item: SourceItem) -> Path:
+    return _relocate_source(item, resolution={"resolution": "archived"})
+
+
+def _archive_duplicate_guard(item: SourceItem) -> Path:
+    return _relocate_source(
+        item,
+        resolution={
+            "resolution": "duplicate_guard",
+            "note": "action_id already active in workflow ledger",
+        },
+    )
 
 
 def _quarantine_malformed(path: Path, error: Exception) -> None:
@@ -518,52 +589,102 @@ def _quarantine_malformed(path: Path, error: Exception) -> None:
         LOGGER.exception("Could not quarantine malformed source %s", path)
 
 
-def process_item(client: Groq, item: SourceItem) -> tuple[Path, Path | None]:
-    """Run the seven-step workflow for one already-validated source item."""
-    decision = classify_item(client, item)
-    query = " ".join((item.subject, item.body)).strip() or item.action_id
-    knowledge_context = retrieve_relevant_sections(
-        query,
-        top_k=REASONING_TOP_K,
+def process_item(client: Groq, item: SourceItem) -> tuple[Path | None, Path | None]:
+    """Run autonomy assessment, policy routing, and workflow side effects."""
+    policy = load_operator_policy()
+    assessment = assess_event(client, item, policy)
+    final = resolve_autonomy_mode(
+        event_id=item.action_id,
+        assessment=assessment,
+        policy=policy,
+        sender=item.sender,
+        subject=item.subject,
+        body=item.body,
     )
-    references = extract_knowledge_references(knowledge_context)
+    decision = _decision_from_assessment(assessment)
 
+    append_decision_record(
+        {
+            **final.to_audit_dict(),
+            "agent": "reasoning",
+            "source_file": item.path.name,
+        }
+    )
+
+    references: list[str] = []
     draft_body: str | None = None
-    if decision.action_type == "email_send":
-        draft_body = draft_email(client, item, knowledge_context)
-
     created_at = utc_now()
-    plan_path = _create_plan(
-        item,
-        decision,
-        references,
-        created_at,
-    )
 
-    if decision.informational:
-        done_path = _move_to_done(item)
+    if final.requires_approval:
+        query = " ".join((item.subject, item.body)).strip() or item.action_id
+        knowledge_context = retrieve_relevant_sections(
+            query,
+            top_k=REASONING_TOP_K,
+        )
+        references = extract_knowledge_references(knowledge_context)
+        if decision.action_type == "email_send":
+            draft_body = draft_email(client, item, knowledge_context)
+
+        plan_path = _create_plan(
+            item,
+            decision,
+            final,
+            references,
+            created_at,
+        )
+        approval_path = _create_approval(
+            item,
+            decision,
+            final,
+            references,
+            created_at,
+            draft_body,
+        )
+        done_path = _relocate_source(
+            item,
+            resolution={
+                "resolution": "pending_approval",
+                "autonomy_mode": final.autonomy_mode,
+                "policy_rule_id": final.policy_rule_id,
+            },
+        )
         LOGGER.info(
-            "Completed informational item %s; plan=%s done=%s",
+            "Approval required for %s: plan=%s pending=%s archived=%s",
             item.action_id,
             plan_path,
+            approval_path,
             done_path,
         )
-        return plan_path, None
+        return plan_path, approval_path
 
-    approval_path = _create_approval(
+    append_digest_entry(
+        {
+            "action_id": item.action_id,
+            "from": item.sender,
+            "subject": item.subject,
+            "summary": assessment.summary,
+            "autonomy_mode": final.autonomy_mode,
+            "classifications": list(final.classifications),
+            "policy_rule_id": final.policy_rule_id,
+            "timestamp": isoformat_utc(created_at),
+        }
+    )
+    done_path = _relocate_source(
         item,
-        decision,
-        references,
-        created_at,
-        draft_body,
+        resolution={
+            "resolution": "auto_handled",
+            "autonomy_mode": final.autonomy_mode,
+            "policy_rule_id": final.policy_rule_id,
+            "digest_summary": assessment.summary,
+        },
     )
     LOGGER.info(
-        "Created plan and approval for %s: %s, %s",
+        "Auto-handled %s (%s); done=%s",
         item.action_id,
-        plan_path,
-        approval_path,
+        final.autonomy_mode,
+        done_path,
     )
-    return plan_path, approval_path
+    return None, None
 
 
 def build_client() -> Groq:
@@ -609,6 +730,12 @@ def run_once(client: Groq | None = None, *, limit: int | None = None) -> int:
                 item.action_id,
                 path,
             )
+            try:
+                _archive_duplicate_guard(item)
+            except OSError:
+                LOGGER.exception(
+                    "Could not archive duplicate source %s.", item.action_id
+                )
             continue
 
         try:

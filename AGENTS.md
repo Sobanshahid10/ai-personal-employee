@@ -56,13 +56,13 @@ is persisted only after staging succeeds.
 | Field | Contract |
 | --- | --- |
 | Trigger | Gmail watcher invokes it after staging mail; operator may run it manually |
-| Input | `Needs_Action/*.md`, knowledge retrieval results, Groq model |
-| Output | `Plans/Plan_<action_id>.md`; actionable items create `Pending_Approval/<action_id>.md`; informational items move to `Done/`; malformed inputs move to `Failed/` |
-| What it does | Classifies work, retrieves grounded context, drafts at temperature `0.3`, records recommended steps, and produces an approval artifact containing the exact proposed text |
+| Input | `Needs_Action/*.md`, operator policy YAML, knowledge retrieval, Groq model |
+| Output | `Logs/digests/` and `Logs/decisions/` audit entries; `Plans/` + `Pending_Approval/` when human approval is required; source removed from `Needs_Action/` to `Done/`; malformed inputs move to `Failed/` |
+| What it does | Assesses events with structured enums (no numeric scores), applies a deterministic policy engine, auto-summarizes low-impact mail into daily digests, drafts at temperature `0.3` when approval is required, and produces an approval artifact containing the exact proposed text |
 
 Before any LLM call it checks `action_id` across `Pending_Approval/`,
-`Approved/`, and `Done/`. The approval artifact includes an integrity hash for
-the immutable `draft_body`.
+`Approved/`, `Rejected/`, and `Done/`. The approval artifact includes an integrity hash for
+the immutable `draft_body`. External sends still require dashboard approval only.
 
 ## Job search agent
 
@@ -186,6 +186,8 @@ approval artifact and receipt workflow.
 | `PROCESSED_IDS_FILE` | Gmail ingestion idempotency state |
 | `KNOWLEDGE_BASE_FILE` | Grounding document |
 | `EXECUTION_RECEIPTS_FILE` | External-action idempotency ledger |
+| `OPERATOR_POLICY_FILE` | Private autonomy routing policy (YAML) |
+| `DIGESTS_DIR`, `DECISIONS_DIR` | Auto-handled summaries and decision audit JSONL |
 | `LOG_FILE` | Rotating combined agent log |
 | `REASONING_LOOP_FILE`, `LINKEDIN_POSTER_FILE` | Subprocess entry points |
 

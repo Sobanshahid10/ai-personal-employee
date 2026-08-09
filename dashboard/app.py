@@ -321,12 +321,20 @@ def create_app(
             for key, folder in mapping.items()
         }
         entries, log_errors = _load_daily_logs(app.config["LOGS_DIR"])
+        digest_today = 0
+        try:
+            from autonomy import load_digest_entries  # noqa: WPS433
+
+            digest_today = len(load_digest_entries())
+        except ImportError:
+            pass
         return jsonify(
             {
                 "counts": counts,
                 "pending": counts.get("pending_approval", 0),
                 "done": counts.get("done", 0),
                 "failed": counts.get("failed", 0),
+                "digest_today": digest_today,
                 "total_items": sum(counts.values()),
                 "recent_activity": entries[
                     : app.config["RECENT_ACTIVITY"]
@@ -449,6 +457,24 @@ def create_app(
         except OSError as exc:
             raise APIError(f"Could not read agent log: {exc}", 500) from exc
         return jsonify({"count": len(lines), "lines": lines})
+
+    @app.get("/api/digest")
+    def api_digest() -> Response:
+        date_value = request.args.get("date")
+        try:
+            from autonomy import digest_batch_summary, load_digest_entries  # noqa: WPS433
+        except ImportError as exc:
+            raise APIError(f"Digest module unavailable: {exc}", 500) from exc
+        entries = load_digest_entries(date_value)
+        return jsonify(
+            {
+                "date": date_value
+                or datetime.now(tz=UTC).date().isoformat(),
+                "count": len(entries),
+                "batch_summary": digest_batch_summary(entries),
+                "entries": json_safe(entries),
+            }
+        )
 
     @app.get("/api/all-items")
     def api_all_items() -> Response:

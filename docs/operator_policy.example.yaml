@@ -1,0 +1,27 @@
+# Copy to credentials/operator_policy.yaml and customize (credentials/ is gitignored).
+# The reasoning agent loads credentials/operator_policy.yaml first, then this example.
+
+version: 1
+
+senders:
+  vip: []
+  always_approval: []
+
+routing:
+  muted_domains: []
+  muted_local_parts: [noreply, no-reply, notifications, mailer-daemon]
+  approval_topics:
+    - refund
+    - invoice
+    - contract
+    - password
+    - wire
+    - legal
+    - terminate
+    - lawsuit
+
+autonomy:
+  allow_auto_internal: true
+
+digest:
+  roll_up: daily

@@ -13,6 +13,7 @@ from unittest.mock import patch
 import yaml
 
 import reasoning_loop
+import autonomy
 
 
 def fake_response(content: str) -> SimpleNamespace:
@@ -55,13 +56,24 @@ class ReasoningLoopTests(unittest.TestCase):
             "APPROVED_DIR": self.root / "Approved",
             "DONE_DIR": self.root / "Done",
             "FAILED_DIR": self.root / "Failed",
+            "DIGESTS_DIR": self.root / "Logs" / "digests",
+            "DECISIONS_DIR": self.root / "Logs" / "decisions",
         }
         for directory in self.directories.values():
             directory.mkdir(parents=True)
         self.patches = [
             patch.object(reasoning_loop, name, value)
             for name, value in self.directories.items()
+            if hasattr(reasoning_loop, name)
         ]
+        self.patches.extend(
+            [
+                patch.object(autonomy, "DIGESTS_DIR", self.directories["DIGESTS_DIR"]),
+                patch.object(
+                    autonomy, "DECISIONS_DIR", self.directories["DECISIONS_DIR"]
+                ),
+            ]
+        )
         for active_patch in self.patches:
             active_patch.start()
 
@@ -100,12 +112,19 @@ information do you need from me?
 
     def test_email_creates_plan_and_immutable_approval(self) -> None:
         self.write_source()
-        classification = json.dumps(
+        assessment = json.dumps(
             {
-                "action_type": "email_send",
-                "informational": False,
-                "priority": "medium",
-                "category": "refund_request",
+                "action_required": True,
+                "classifications": [
+                    "EXTERNAL_COMMUNICATION",
+                    "USER_ACTION_REQUIRED",
+                ],
+                "reply_intent": "required",
+                "confidence": "high",
+                "importance": "moderate",
+                "risk": "moderate",
+                "reversibility": "PARTIALLY_REVERSIBLE",
+                "recommended_autonomy_mode": "ASK_USER",
                 "summary": "Customer asks about the refund deadline.",
                 "steps": [
                     "Confirm the purchase date and receipt.",
@@ -118,11 +137,14 @@ information do you need from me?
             "after purchase. Please send your receipt and purchase details.\n\n"
             "Best regards,\nChiefMind Team"
         )
-        client = FakeGroq([classification, draft])
+        client = FakeGroq([assessment, draft])
 
         completed = reasoning_loop.run_once(client=client)
 
         self.assertEqual(completed, 1)
+        self.assertFalse(
+            (self.directories["NEEDS_ACTION_DIR"] / "email_test123.md").is_file()
+        )
         plan_path = self.directories["PLANS_DIR"] / "Plan_email_test123.md"
         approval_path = (
             self.directories["PENDING_APPROVAL_DIR"] / "email_test123.md"
@@ -162,19 +184,32 @@ information do you need from me?
 
         self.assertEqual(completed, 0)
         self.assertEqual(client.completions.calls, [])
+        self.assertFalse(
+            (self.directories["NEEDS_ACTION_DIR"] / "email_test123.md").is_file()
+        )
+        self.assertTrue(
+            any(
+                path.name.startswith("email_test123")
+                for path in self.directories["DONE_DIR"].glob("*.md")
+            )
+        )
 
-    def test_informational_item_moves_to_done(self) -> None:
+    def test_auto_handled_item_moves_to_done_without_pending(self) -> None:
         source = self.write_source()
         client = FakeGroq(
             [
                 json.dumps(
                     {
-                        "action_type": "manual",
-                        "informational": True,
-                        "priority": "low",
-                        "category": "newsletter",
-                        "summary": "Informational newsletter.",
-                        "steps": ["Record the update.", "No response is required."],
+                        "action_required": False,
+                        "classifications": ["INFORMATION_ONLY", "ROUTINE_ACTION"],
+                        "reply_intent": "none",
+                        "confidence": "high",
+                        "importance": "low",
+                        "risk": "low",
+                        "reversibility": "REVERSIBLE",
+                        "recommended_autonomy_mode": "AUTO_EXECUTE_AND_SUMMARIZE",
+                        "summary": "Routine CI notification.",
+                        "steps": [],
                     }
                 )
             ]
@@ -191,6 +226,18 @@ information do you need from me?
             list(self.directories["PENDING_APPROVAL_DIR"].glob("*.md")),
             [],
         )
+        self.assertEqual(
+            list(self.directories["PLANS_DIR"].glob("*.md")),
+            [],
+        )
+        digest_files = list(self.directories["DIGESTS_DIR"].glob("*.jsonl"))
+        self.assertEqual(len(digest_files), 1)
+        digest_lines = digest_files[0].read_text(encoding="utf-8").strip().splitlines()
+        self.assertEqual(len(digest_lines), 1)
+        digest_entry = json.loads(digest_lines[0])
+        self.assertEqual(digest_entry["action_id"], "email_test123")
+        decision_files = list(self.directories["DECISIONS_DIR"].glob("*.jsonl"))
+        self.assertTrue(decision_files)
 
     def test_malformed_source_is_quarantined(self) -> None:
         source = self.directories["NEEDS_ACTION_DIR"] / "bad.md"

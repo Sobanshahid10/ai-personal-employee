@@ -4,66 +4,315 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#070b16">
-    <title>ChiefMind · Personal Employee</title>
+    <title>ChiefMind · Autonomous AI Personal Employee</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
   </head>
   <body>
+    <!-- Ambient glowing backgrounds -->
     <div class="ambient ambient-one" aria-hidden="true"></div>
     <div class="ambient ambient-two" aria-hidden="true"></div>
+    <div class="ambient ambient-three" aria-hidden="true"></div>
 
+    <!-- Main Sidebar -->
     <aside class="sidebar" id="sidebar">
-      <a class="brand" href="#dashboard" aria-label="ChiefMind dashboard">
-        <span class="brand-mark" aria-hidden="true">C</span>
-        <span><strong>ChiefMind</strong><small>Personal Employee</small></span>
+      <a class="brand" href="#dashboard" aria-label="ChiefMind AI Dashboard">
+        <div class="brand-mark-wrapper">
+          <span class="brand-mark" aria-hidden="true">C</span>
+          <span class="brand-glow"></span>
+        </div>
+        <div class="brand-text">
+          <strong>ChiefMind</strong>
+          <small>AI Personal Employee</small>
+        </div>
       </a>
+      
       <nav class="navigation" aria-label="Workflow views">
-        <button class="nav-item active" data-view="dashboard"><span>⌂</span>Dashboard</button>
-        <button class="nav-item" data-view="pending_approval"><span>✓</span>Pending Approval <b class="nav-count" data-count="pending_approval">0</b></button>
-        <button class="nav-item" data-view="needs_action"><span>◇</span>Needs Action <b class="nav-count" data-count="needs_action">0</b></button>
-        <button class="nav-item" data-view="done"><span>●</span>Done <b class="nav-count" data-count="done">0</b></button>
-        <button class="nav-item" data-view="plans"><span>≡</span>Plans <b class="nav-count" data-count="plans">0</b></button>
-        <button class="nav-item" data-view="activity"><span>↗</span>Activity Log</button>
-        <button class="nav-item" data-view="failed"><span>!</span>Failed <b class="nav-count" data-count="failed">0</b></button>
+        <button class="nav-item active" data-view="dashboard">
+          <span class="nav-icon">⌂</span>
+          <span class="nav-label">Dashboard</span>
+        </button>
+        <button class="nav-item" data-view="pending_approval">
+          <span class="nav-icon">✓</span>
+          <span class="nav-label">Pending Approval</span>
+          <b class="nav-count" data-count="pending_approval">0</b>
+        </button>
+        <button class="nav-item" data-view="needs_action">
+          <span class="nav-icon">◇</span>
+          <span class="nav-label">Needs Action</span>
+          <b class="nav-count" data-count="needs_action">0</b>
+        </button>
+        <button class="nav-item" data-view="done">
+          <span class="nav-icon">●</span>
+          <span class="nav-label">Done</span>
+          <b class="nav-count" data-count="done">0</b>
+        </button>
+        <button class="nav-item" data-view="plans">
+          <span class="nav-icon">≡</span>
+          <span class="nav-label">Plans</span>
+          <b class="nav-count" data-count="plans">0</b>
+        </button>
+        <button class="nav-item" data-view="activity">
+          <span class="nav-icon">↗</span>
+          <span class="nav-label">Activity Log</span>
+        </button>
+        <button class="nav-item" data-view="failed">
+          <span class="nav-icon">!</span>
+          <span class="nav-label">Failed</span>
+          <b class="nav-count" data-count="failed">0</b>
+        </button>
       </nav>
-      <div class="system-status"><i></i><span><strong>System online</strong><small>Refreshes every 30 seconds</small></span></div>
+
+      <div class="system-status">
+        <span class="status-indicator"><i class="status-dot"></i></span>
+        <div class="status-info">
+          <strong>System online</strong>
+          <small id="poll-info">Auto-sync 30s</small>
+        </div>
+      </div>
     </aside>
 
+    <!-- Main Workspace -->
     <main class="main-content">
       <header class="topbar">
         <button class="menu-button" id="menu-button" aria-label="Toggle navigation" aria-expanded="false">☰</button>
-        <div><p class="eyebrow">Workflow command center</p><h1 id="view-title">Dashboard</h1></div>
+        
+        <div class="topbar-left">
+          <p class="eyebrow">Autonomous Executive Assistant</p>
+          <h1 id="view-title">Dashboard</h1>
+        </div>
+
+        <div class="search-box-wrapper">
+          <svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input type="text" id="search-input" class="search-input" placeholder="Search emails, plans, items..." aria-label="Search workflow items" autocomplete="off">
+          <button class="search-clear hidden" id="search-clear" aria-label="Clear search">×</button>
+        </div>
+
         <div class="topbar-actions">
-          <span class="last-updated" id="last-updated">Waiting for data…</span>
-          <button class="icon-button" id="refresh-button" aria-label="Refresh dashboard">↻</button>
+          <span class="last-updated" id="last-updated">Updating…</span>
+          <button class="icon-button" id="refresh-button" title="Refresh Dashboard" aria-label="Refresh dashboard">
+            <svg class="refresh-svg" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M23 4v6h-6M1 20v-6h6"></path>
+              <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"></path>
+            </svg>
+          </button>
+          
+          <!-- Top Right Profile Badge Trigger -->
+          <div class="profile-trigger-wrapper">
+            <button class="profile-trigger" id="profile-trigger" aria-label="Open profile badge" aria-expanded="false">
+              <div class="profile-avatar-sm">
+                <span>MS</span>
+                <span class="online-indicator"></span>
+              </div>
+              <div class="profile-meta-sm">
+                <span class="meta-name">M. Soban</span>
+                <span class="meta-role">AI Engineer</span>
+              </div>
+            </button>
+
+            <!-- Profile Badge Card Popover (Matches User Screenshot) -->
+            <div class="profile-card-popover hidden" id="profile-popover" role="dialog" aria-label="Developer Profile Card">
+              <button class="profile-close" id="profile-close" aria-label="Close profile modal">×</button>
+              
+              <div class="profile-card-header">
+                <div class="profile-avatar-lg">
+                  <span>MS</span>
+                </div>
+                <h2 class="profile-name">Muhammad Soban</h2>
+                <p class="profile-title">A I &nbsp; E N G I N E E R</p>
+              </div>
+
+              <div class="profile-info-card">
+                <h4 class="info-dept">Department of Artificial Intelligence</h4>
+                <p class="info-uni">University of Management and Technology</p>
+                <p class="info-loc">Lahore, Pakistan</p>
+              </div>
+
+              <a href="https://github.com/Sobanshahid10/ai-personal-employee" target="_blank" rel="noopener noreferrer" class="profile-github-btn">
+                <svg class="github-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                  <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+                </svg>
+                <span>GitHub Repository</span>
+              </a>
+            </div>
+          </div>
         </div>
       </header>
 
-      <div class="alert hidden" id="alert" role="status" aria-live="polite"></div>
+      <!-- Toast Alerts Container -->
+      <div class="toast-container" id="toast-container" aria-live="polite"></div>
 
+      <!-- Dashboard View -->
       <section class="view active" id="view-dashboard" aria-labelledby="view-title">
         <div class="kpi-grid" id="kpi-grid"></div>
+
         <div class="dashboard-grid">
-          <article class="glass-panel span-two"><div class="section-heading"><div><p class="eyebrow">Live queue</p><h2>Needs your attention</h2></div><button class="text-button" data-go="pending_approval">View all →</button></div><div id="attention-list" class="item-list"></div></article>
-          <article class="glass-panel"><div class="section-heading"><div><p class="eyebrow">Latest events</p><h2>Recent activity</h2></div></div><div id="recent-timeline" class="timeline compact"></div></article>
+          <article class="glass-panel span-two">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Action Items</p>
+                <h2>Needs Your Attention</h2>
+              </div>
+              <div class="heading-controls">
+                <button class="text-button" data-go="pending_approval">View All Pending →</button>
+              </div>
+            </div>
+            <div id="attention-list" class="item-list"></div>
+          </article>
+
+          <article class="glass-panel">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Audit Stream</p>
+                <h2>Recent Activity</h2>
+              </div>
+            </div>
+            <div id="recent-timeline" class="timeline compact"></div>
+          </article>
+
+          <article class="glass-panel span-two">
+            <div class="section-heading">
+              <div>
+                <p class="eyebrow">Autonomy Digest</p>
+                <h2>Handled Automatically Today</h2>
+              </div>
+            </div>
+            <div id="digest-list" class="timeline compact"></div>
+          </article>
         </div>
       </section>
 
+      <!-- Folder / Workflow Items View -->
       <section class="view" id="view-folder" aria-labelledby="folder-title">
-        <article class="glass-panel"><div class="section-heading"><div><p class="eyebrow">Workflow items</p><h2 id="folder-title">Items</h2></div><span class="result-count" id="folder-count">0 items</span></div><div id="folder-list" class="item-list"></div></article>
+        <article class="glass-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Workflow Items</p>
+              <h2 id="folder-title">Items</h2>
+            </div>
+            <div class="heading-actions">
+              <div class="filter-pills" id="category-filters">
+                <button class="filter-pill active" data-filter="all">All</button>
+                <button class="filter-pill" data-filter="email">Emails ✉️</button>
+                <button class="filter-pill" data-filter="linkedin">LinkedIn 💼</button>
+                <button class="filter-pill" data-filter="plan">Plans 📋</button>
+                <button class="filter-pill" data-filter="manual">Manual ⚙️</button>
+              </div>
+              <span class="result-count" id="folder-count">0 items</span>
+            </div>
+          </div>
+          <div id="folder-list" class="item-list"></div>
+        </article>
       </section>
 
+      <!-- Activity Log View -->
       <section class="view" id="view-activity" aria-labelledby="activity-title">
-        <article class="glass-panel"><div class="section-heading"><div><p class="eyebrow">Audit trail</p><h2 id="activity-title">Activity Log</h2></div><span class="result-count" id="activity-count">0 events</span></div><div id="activity-timeline" class="timeline"></div></article>
+        <article class="glass-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">System Audit Ledger</p>
+              <h2 id="activity-title">Activity Log</h2>
+            </div>
+            <span class="result-count" id="activity-count">0 events</span>
+          </div>
+          <div id="activity-timeline" class="timeline"></div>
+        </article>
       </section>
     </main>
 
+    <!-- Rich Item Detail & Email Reader Modal -->
     <div class="modal-backdrop hidden" id="detail-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
       <article class="modal-card">
-        <header class="modal-header"><div><p class="eyebrow" id="modal-folder">Item detail</p><h2 id="modal-title">Workflow item</h2></div><button class="icon-button" id="modal-close" aria-label="Close detail">×</button></header>
-        <div class="modal-content"><section><h3>Frontmatter</h3><dl class="metadata-grid" id="modal-metadata"></dl></section><section><h3>Markdown body</h3><pre class="markdown-body" id="modal-body"></pre></section></div>
+        <header class="modal-header">
+          <div class="modal-header-meta">
+            <div class="modal-badges" id="modal-badges">
+              <span class="badge badge-type" id="modal-type-badge">ITEM</span>
+              <span class="badge badge-status" id="modal-status-badge">INFO</span>
+            </div>
+            <h2 id="modal-title">Workflow Item Detail</h2>
+            <p class="modal-subtitle" id="modal-subtitle">File: item.md</p>
+          </div>
+          <button class="icon-button modal-close-btn" id="modal-close" aria-label="Close detail modal">×</button>
+        </header>
+
+        <div class="modal-tab-bar" id="modal-tab-bar">
+          <button class="tab-btn active" data-tab="reader" id="tab-btn-reader">📖 Reader &amp; Email View</button>
+          <button class="tab-btn hidden" data-tab="draft" id="tab-btn-draft">⚡ AI Draft Reply</button>
+          <button class="tab-btn" data-tab="metadata" id="tab-btn-metadata">⚙️ Raw Frontmatter</button>
+        </div>
+
+        <div class="modal-content">
+          <!-- Reader Tab Content (Email Reader & Formatted Content) -->
+          <div class="tab-pane active" id="pane-reader">
+            <div class="email-viewer hidden" id="email-viewer">
+              <div class="email-header-card">
+                <div class="email-avatar" id="email-avatar">EM</div>
+                <div class="email-header-details">
+                  <div class="email-field-row">
+                    <span class="field-label">From:</span>
+                    <span class="field-value email-from" id="email-from">Sender Name &lt;email@example.com&gt;</span>
+                  </div>
+                  <div class="email-field-row" id="email-to-row">
+                    <span class="field-label">To:</span>
+                    <span class="field-value email-to" id="email-to">Recipient &lt;to@example.com&gt;</span>
+                  </div>
+                  <div class="email-field-row">
+                    <span class="field-label">Received:</span>
+                    <span class="field-value email-date" id="email-date">Aug 9, 2026, 5:00 PM</span>
+                  </div>
+                  <div class="email-subject-box">
+                    <span class="subject-label">Subject:</span>
+                    <h3 class="email-subject" id="email-subject">Email Subject Line</h3>
+                  </div>
+                </div>
+              </div>
+
+              <div class="reader-body-container">
+                <div class="formatted-reader" id="email-body-parsed"></div>
+              </div>
+            </div>
+
+            <!-- Standard Markdown Reader (for non-email items) -->
+            <div class="standard-reader" id="standard-reader">
+              <div class="formatted-reader" id="standard-body-parsed"></div>
+            </div>
+          </div>
+
+          <!-- AI Response Draft Tab Content -->
+          <div class="tab-pane hidden" id="pane-draft">
+            <div class="draft-card">
+              <div class="draft-header">
+                <span class="draft-badge">⚡ PROPOSED AI ACTION DRAFT</span>
+                <span class="draft-target" id="draft-target">Recipient: unknown</span>
+              </div>
+              <div class="draft-subject-line" id="draft-subject-box">
+                <strong>Subject:</strong> <span id="draft-subject-val">Re: Subject</span>
+              </div>
+              <div class="draft-body-box">
+                <pre class="draft-text" id="draft-text-val"></pre>
+              </div>
+            </div>
+          </div>
+
+          <!-- Metadata Tab Content -->
+          <div class="tab-pane hidden" id="pane-metadata">
+            <dl class="metadata-grid" id="modal-metadata"></dl>
+          </div>
+        </div>
+
+        <footer class="modal-footer" id="modal-footer">
+          <div class="modal-footer-actions" id="modal-action-buttons">
+            <button class="footer-btn action-approve approve" id="modal-btn-approve">✓ Approve Action</button>
+            <button class="footer-btn action-reject reject" id="modal-btn-reject">✗ Reject Action</button>
+            <button class="footer-btn copy-btn" id="modal-btn-copy">📋 Copy Body</button>
+            <button class="footer-btn close-btn" id="modal-btn-close">Close</button>
+          </div>
+        </footer>
       </article>
     </div>
 
