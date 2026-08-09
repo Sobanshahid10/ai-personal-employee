@@ -34,6 +34,8 @@ flowchart LR
 The decisive boundary is `Pending_Approval/`. The LLM may propose an action,
 but only a human can move its immutable artifact into `Approved/`.
 
+Project owner résumé: [Muhammad Soban CV](output/pdf/Muhammad_Soban_CV.pdf)
+
 ## Features
 
 | Capability | What ChiefMind does |
