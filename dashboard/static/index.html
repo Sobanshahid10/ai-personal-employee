@@ -178,6 +178,19 @@
           <article class="glass-panel span-two">
             <div class="section-heading">
               <div>
+                <p class="eyebrow">Completion Ledger</p>
+                <h2>Done Summary</h2>
+              </div>
+              <button class="text-button" data-go="done">Open Done Queue →</button>
+            </div>
+            <p class="done-headline" id="done-headline">Loading completed work…</p>
+            <div class="done-stats-grid" id="done-stats-grid"></div>
+            <div id="done-recent-list" class="timeline compact"></div>
+          </article>
+
+          <article class="glass-panel span-two">
+            <div class="section-heading">
+              <div>
                 <p class="eyebrow">Autonomy Digest</p>
                 <h2>Handled Automatically Today</h2>
               </div>
@@ -242,6 +255,7 @@
 
         <div class="modal-tab-bar" id="modal-tab-bar">
           <button class="tab-btn active" data-tab="reader" id="tab-btn-reader">📖 Reader &amp; Email View</button>
+          <button class="tab-btn hidden" data-tab="plan" id="tab-btn-plan">📋 Action Plan</button>
           <button class="tab-btn hidden" data-tab="draft" id="tab-btn-draft">⚡ AI Draft Reply</button>
           <button class="tab-btn" data-tab="metadata" id="tab-btn-metadata">⚙️ Raw Frontmatter</button>
         </div>
@@ -280,6 +294,14 @@
             <!-- Standard Markdown Reader (for non-email items) -->
             <div class="standard-reader" id="standard-reader">
               <div class="formatted-reader" id="standard-body-parsed"></div>
+            </div>
+          </div>
+
+          <!-- Formatted Action Plan -->
+          <div class="tab-pane hidden" id="pane-plan">
+            <div class="plan-card">
+              <div class="plan-card-glow" aria-hidden="true"></div>
+              <div class="formatted-reader plan-reader" id="plan-body-parsed"></div>
             </div>
           </div>
 

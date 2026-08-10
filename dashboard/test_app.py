@@ -250,6 +250,30 @@ Markdown body.
         self.assertEqual(payload["entries"][0]["action_id"], "email_digest")
         self.assertIn("Handled 1 item", payload["batch_summary"])
 
+    def test_done_summary_rolls_up_resolutions(self) -> None:
+        path = self.write_item("done", "done.md", "email_done")
+        path.write_text(
+            """---
+action_id: email_done
+type: email
+subject: "Routine update"
+resolution: auto_handled
+autonomy_mode: AUTO_EXECUTE_AND_SUMMARIZE
+resolved_at: "2026-08-10T10:00:00Z"
+---
+Completed.
+""",
+            encoding="utf-8",
+        )
+
+        response = self.client.get("/api/done-summary")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["total"], 1)
+        self.assertEqual(payload["by_resolution"]["auto_handled"], 1)
+        self.assertEqual(payload["recent"][0]["subject"], "Routine update")
+
     def test_root_serves_dashboard_frontend(self) -> None:
         response = self.client.get("/")
 

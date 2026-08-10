@@ -472,6 +472,65 @@ def _reply_subject(subject: str) -> str:
     return subject if re.match(r"(?i)^re\s*:", subject.strip()) else f"Re: {subject}"
 
 
+def _plan_text(value: Any) -> str:
+    """Normalize untrusted source text before rendering it in a plan."""
+    return " ".join(str(value or "").replace("\x00", "").split())
+
+
+def _plan_table_text(value: Any) -> str:
+    return _plan_text(value).replace("|", "\\|")
+
+
+def _format_plan_body(
+    item: SourceItem,
+    decision: Decision,
+    final: FinalDecision,
+    references: list[str],
+) -> str:
+    """Render a human-readable plan document beneath YAML frontmatter."""
+    steps = list(decision.steps) or ["Review the prepared recommendation."]
+    step_lines = "\n".join(
+        f"{index}. {_plan_text(step)}" for index, step in enumerate(steps, 1)
+    )
+    reference_lines = (
+        "\n".join(f"- {_plan_text(reference)}" for reference in references)
+        if references
+        else "- No knowledge-base sections matched."
+    )
+    classifications = ", ".join(
+        label.replace("_", " ").title() for label in final.classifications
+    )
+    return f"""# Action Plan
+
+## Overview
+{_plan_text(decision.summary)}
+
+## Recommended Action
+| Field | Value |
+| --- | --- |
+| Type | `{_plan_table_text(decision.action_type)}` |
+| Priority | `{_plan_table_text(decision.priority)}` |
+| Category | `{_plan_table_text(decision.category)}` |
+| Autonomy mode | `{_plan_table_text(final.autonomy_mode)}` |
+| Classifications | {_plan_table_text(classifications)} |
+
+## Steps
+{step_lines}
+
+## Policy Routing
+- **Rule:** `{_plan_text(final.policy_rule_id)}`
+- **Reason:** {_plan_text(final.reason)}
+
+## Source Email
+- **From:** {_plan_text(item.sender)}
+- **Subject:** {_plan_text(item.subject)}
+- **Received:** {_plan_text(item.metadata.get("received_at", "unknown"))}
+
+## Knowledge References
+{reference_lines}
+"""
+
+
 def _create_plan(
     item: SourceItem,
     decision: Decision,
@@ -494,7 +553,8 @@ def _create_plan(
         "created_at": isoformat_utc(created_at),
     }
     path = PLANS_DIR / f"Plan_{_safe_fragment(item.action_id)}.md"
-    atomic_write(path, dump_frontmatter(metadata, decision.summary))
+    body = _format_plan_body(item, decision, final, references)
+    atomic_write(path, dump_frontmatter(metadata, body))
     return path
 
 

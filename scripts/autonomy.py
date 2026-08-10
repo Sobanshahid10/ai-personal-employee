@@ -70,6 +70,9 @@ ROUTINE_NOTIFICATION_TERMS = (
     "recommended for you",
     "new job",
     "job alert",
+    "more jobs",
+    "more remote",
+    "work from home jobs",
     "run succeeded",
     "workflow succeeded",
     "newsletter",
@@ -78,10 +81,74 @@ ROUTINE_NOTIFICATION_TERMS = (
     "advertisement",
     "special offer",
     "limited time offer",
+    "sale",
+    "save big",
     "discount",
     "coupon",
     "shop now",
     "sale ends",
+    "product update",
+    "product updates",
+    "new in ",
+    "picked for you",
+    "top picks for you",
+    "thanks for being",
+    "valued member",
+    "you have an invitation",
+    "see who else is applying",
+    "competition launch",
+    "internship",
+    "redefine what",
+    "seo has changed",
+    "edit images",
+    "unlimited for everyone",
+    "reminder notice",
+    "the world:",
+    "happenings",
+    "summer drop",
+    "ready to ship",
+    "build with agents",
+    "accurate, explainable",
+    "digital credential",
+    "badge survey",
+)
+BULK_MARKETING_DOMAINS = frozenset(
+    {
+        "linkedin.com",
+        "indeed.com",
+        "nytimes.com",
+        "coursera.org",
+        "render.com",
+        "theresanaiforthat.com",
+        "unstop.news",
+        "neilpatel.com",
+        "shutterstock.com",
+        "kaggle.com",
+        "neo4j.com",
+        "feedspot.com",
+        "furorjeans.com",
+        "hubspotlinks.com",
+        "github.com",
+        "m.learn.coursera.org",
+        "em.linkedin.com",
+        "emktng.shutterstock.com",
+        "jobalert.indeed.com",
+        "match.indeed.com",
+        "e.linkedin.com",
+        "e.feedspot.com",
+        "deeplearning.ai",
+        "credly.com",
+        "marketing.pakwheels.com",
+        "us.ibm.com",
+    }
+)
+INFORMATIONAL_SECURITY_SUBJECTS = (
+    "oauth application has been added",
+    "third-party oauth application",
+    "new oauth application",
+    "fine-grained personal access token",
+    "deploy key",
+    "you shared some google account data with",
 )
 EXPLICIT_SPONSORED_TERMS = (
     "sponsored",
@@ -99,28 +166,40 @@ PERSON_TO_PERSON_TERMS = (
     "replied to you",
     "mentioned you",
 )
-SENSITIVE_NOTIFICATION_TERMS = (
+SUBJECT_SENSITIVE_TERMS = (
     "action required",
     "account locked",
     "account suspended",
-    "authentication",
-    "billing",
+    "account compromised",
     "dependabot alert",
-    "failed",
-    "invoice",
-    "legal",
-    "login",
-    "password",
-    "payment",
+    "invoice due",
+    "legal notice",
+    "password reset",
+    "payment failed",
+    "payment declined",
     "secret exposed",
-    "security",
-    "sign-in",
-    "suspicious",
+    "security alert",
+    "security warning",
+    "sign-in attempt",
+    "suspicious sign-in",
+    "suspicious activity",
     "two-factor",
     "2fa",
-    "unauthorized",
-    "verify your",
-    "vulnerability",
+    "unauthorized access",
+    "verify your identity",
+    "vulnerability found",
+    "wire transfer",
+)
+BODY_SENSITIVE_TERMS = (
+    "action required",
+    "account locked",
+    "account suspended",
+    "password reset",
+    "payment failed",
+    "secret exposed",
+    "suspicious sign-in",
+    "unauthorized access",
+    "verify your identity",
 )
 
 HARD_ESCALATE_CLASSIFICATIONS = frozenset(
@@ -373,6 +452,16 @@ def _matches_muted_sender(sender: str, policy: OperatorPolicy) -> bool:
     return False
 
 
+def _contains_any(text: str, terms: tuple[str, ...]) -> bool:
+    lowered = text.lower()
+    return any(term in lowered for term in terms)
+
+
+def _is_informational_security_subject(subject: str) -> bool:
+    normalized = " ".join(subject.lower().split())
+    return any(term in normalized for term in INFORMATIONAL_SECURITY_SUBJECTS)
+
+
 def assess_routine_notification(
     *,
     policy: OperatorPolicy,
@@ -398,20 +487,41 @@ def assess_routine_notification(
     domain = _sender_domain(email)
     muted_sender = _matches_muted_sender(sender, policy)
     normalized_subject = " ".join(subject.lower().split())
-    early_content = " ".join(f"{subject}\n{body[:800]}".lower().split())
+    body_preview = body[:800]
+    early_content = " ".join(f"{subject}\n{body_preview}".lower().split())
 
-    if any(term in early_content for term in SENSITIVE_NOTIFICATION_TERMS):
+    if _is_informational_security_subject(subject):
+        display_name, _ = parseaddr(sender)
+        source_label = display_name.strip() or domain or "platform"
+        return EventAssessment(
+            action_required=False,
+            classifications=("INFORMATION_ONLY", "ROUTINE_ACTION"),
+            reply_intent="none",
+            confidence="high",
+            importance="low",
+            risk="low",
+            reversibility="REVERSIBLE",
+            recommended_autonomy_mode="AUTO_EXECUTE_AND_SUMMARIZE",
+            summary=(
+                f"Informational security notice from {source_label}: "
+                f"{subject.strip() or '(no subject)'}"
+            ),
+            steps=(),
+        )
+
+    if _contains_any(subject, SUBJECT_SENSITIVE_TERMS):
+        return None
+    if _contains_any(body_preview, BODY_SENSITIVE_TERMS):
         return None
     if any(topic in normalized_subject for topic in policy.approval_topics):
         return None
     if any(term in normalized_subject for term in PERSON_TO_PERSON_TERMS):
-        return None
+        if not muted_sender and domain not in BULK_MARKETING_DOMAINS:
+            return None
 
-    has_routine_signal = any(
-        term in normalized_subject for term in ROUTINE_NOTIFICATION_TERMS
-    )
-    is_explicitly_sponsored = any(
-        term in normalized_subject for term in EXPLICIT_SPONSORED_TERMS
+    has_routine_signal = _contains_any(normalized_subject, ROUTINE_NOTIFICATION_TERMS)
+    is_explicitly_sponsored = _contains_any(
+        normalized_subject, EXPLICIT_SPONSORED_TERMS
     )
     message_metadata = metadata or {}
     precedence = str(message_metadata.get("precedence", "")).strip().lower()
@@ -425,14 +535,18 @@ def assess_routine_notification(
         or (auto_submitted and auto_submitted != "no")
     )
     has_unsubscribe_footer = "unsubscribe" in body.lower()
+    known_bulk_domain = domain in BULK_MARKETING_DOMAINS or any(
+        domain.endswith(f".{known}") for known in BULK_MARKETING_DOMAINS
+    )
 
-    # This rule is based on email semantics, not a list of websites. Explicitly
-    # sponsored subjects are sufficient; otherwise a bulk marker or unsubscribe
-    # footer is paired with routine language unless the sender is already muted.
     if not (
         is_explicitly_sponsored
+        or (has_bulk_header and has_unsubscribe_footer)
         or ((has_bulk_header or has_unsubscribe_footer) and has_routine_signal)
+        or (muted_sender and (has_bulk_header or has_unsubscribe_footer))
         or (muted_sender and has_routine_signal)
+        or (known_bulk_domain and (has_routine_signal or has_unsubscribe_footer))
+        or (known_bulk_domain and muted_sender)
     ):
         return None
 
@@ -720,6 +834,56 @@ def digest_batch_summary(entries: list[dict[str, Any]]) -> str:
         for label, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))
     ]
     return f"Handled {len(entries)} item(s): " + ", ".join(parts[:6])
+
+
+def summarize_done_items(items: list[dict[str, Any]]) -> dict[str, Any]:
+    """Build a dashboard-friendly rollup of completed workflow items."""
+    by_resolution: dict[str, int] = {}
+    by_mode: dict[str, int] = {}
+    recent: list[dict[str, str]] = []
+
+    for item in items:
+        meta = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+        resolution = str(meta.get("resolution") or "unknown").lower()
+        by_resolution[resolution] = by_resolution.get(resolution, 0) + 1
+        mode = str(meta.get("autonomy_mode") or "unspecified")
+        by_mode[mode] = by_mode.get(mode, 0) + 1
+        if len(recent) < 12:
+            recent.append(
+                {
+                    "subject": str(
+                        meta.get("subject")
+                        or meta.get("digest_summary")
+                        or item.get("name", "")
+                    ),
+                    "from": str(meta.get("from") or ""),
+                    "resolution": resolution,
+                    "autonomy_mode": mode.replace("_", " "),
+                    "resolved_at": str(
+                        meta.get("resolved_at") or item.get("modified_at") or ""
+                    ),
+                }
+            )
+
+    auto_handled = by_resolution.get("auto_handled", 0)
+    approval_routed = by_resolution.get("pending_approval", 0)
+    executed = sum(
+        count
+        for key, count in by_resolution.items()
+        if key in {"executed", "completed", "sent", "posted"}
+    )
+    total = len(items)
+    headline = (
+        f"{total} completed · {auto_handled} handled automatically · "
+        f"{executed} externally executed · {approval_routed} safely routed for approval"
+    )
+    return {
+        "total": total,
+        "headline": headline,
+        "by_resolution": by_resolution,
+        "by_autonomy_mode": by_mode,
+        "recent": recent,
+    }
 
 
 def policy_prompt_excerpt(policy: OperatorPolicy) -> str:

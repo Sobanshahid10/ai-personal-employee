@@ -476,6 +476,25 @@ def create_app(
             }
         )
 
+    @app.get("/api/done-summary")
+    def api_done_summary() -> Response:
+        mapping = app.config["FOLDER_KEYS"]
+        done_dir = mapping.get("done")
+        if done_dir is None:
+            raise APIError("Done folder is not configured.", 500)
+        items = _list_folder_items(
+            "done",
+            done_dir,
+            max_bytes=app.config["MAX_FILE_BYTES"],
+        )
+        try:
+            from autonomy import summarize_done_items  # noqa: WPS433
+        except ImportError as exc:
+            raise APIError(f"Summary module unavailable: {exc}", 500) from exc
+        summary = summarize_done_items(items)
+        summary["generated_at"] = utc_timestamp()
+        return jsonify(json_safe(summary))
+
     @app.get("/api/all-items")
     def api_all_items() -> Response:
         mapping = app.config["FOLDER_KEYS"]

@@ -38,6 +38,18 @@ class AutonomyPolicyTests(unittest.TestCase):
 
         self.assertIsNone(assessment)
 
+    def test_informational_oauth_share_notice_is_summarized(self) -> None:
+        assessment = assess_routine_notification(
+            policy=DEFAULT_POLICY,
+            sender="Google <noreply-accounts@google.com>",
+            subject="You shared some Google Account data with Credly",
+            body="You allowed Credly to access selected profile data.",
+        )
+
+        self.assertIsNotNone(assessment)
+        self.assertFalse(assessment.action_required)
+        self.assertIn("INFORMATION_ONLY", assessment.classifications)
+
     def test_linkedin_direct_message_still_uses_full_reasoning(self) -> None:
         assessment = assess_routine_notification(
             policy=DEFAULT_POLICY,
@@ -70,6 +82,18 @@ class AutonomyPolicyTests(unittest.TestCase):
 
         self.assertIsNotNone(assessment)
         self.assertIn("Example Store", assessment.summary)
+
+    def test_unsubscribable_bulk_newsletter_is_routine(self) -> None:
+        assessment = assess_routine_notification(
+            policy=DEFAULT_POLICY,
+            sender="Research Digest <newsletter@research.example>",
+            subject="This week's artificial intelligence research",
+            body="A curated research roundup. Unsubscribe at any time.",
+            metadata={"list_id": "research.example"},
+        )
+
+        self.assertIsNotNone(assessment)
+        self.assertFalse(assessment.action_required)
 
     def test_no_action_routes_to_auto_summarize(self) -> None:
         assessment = EventAssessment(

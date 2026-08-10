@@ -127,6 +127,105 @@ function parseTextToHtml(text) {
   }).join('');
 }
 
+function renderMarkdown(text) {
+  if (!text) return "<p>(No content)</p>";
+  const lines = text.split("\n");
+  const chunks = [];
+  let paragraph = [];
+  let tableRows = [];
+
+  const inline = value => escapeHtml(value)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    chunks.push(`<p>${inline(paragraph.join(" "))}</p>`);
+    paragraph = [];
+  };
+
+  const flushTable = () => {
+    if (tableRows.length < 2) return;
+    const [header, , ...rows] = tableRows;
+    const headerCells = header.split("|").slice(1, -1).map(cell => cell.trim());
+    const body = rows.map(row => {
+      const cells = row.split("|").slice(1, -1).map(cell => cell.trim());
+      return `<tr>${cells.map(cell => `<td>${escapeHtml(cell.replace(/`/g, ""))}</td>`).join("")}</tr>`;
+    }).join("");
+    chunks.push(
+      `<table class="plan-table"><thead><tr>${headerCells.map(cell => `<th>${escapeHtml(cell.replace(/`/g, ""))}</th>`).join("")}</tr></thead><tbody>${body}</tbody></table>`
+    );
+    tableRows = [];
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+    if (line.startsWith("|")) {
+      flushParagraph();
+      tableRows.push(line);
+      continue;
+    }
+    if (tableRows.length) flushTable();
+
+    if (!line.trim()) {
+      flushParagraph();
+      continue;
+    }
+    if (line.startsWith("# ")) {
+      flushParagraph();
+      chunks.push(`<h1 class="md-h1">${escapeHtml(line.slice(2))}</h1>`);
+      continue;
+    }
+    if (line.startsWith("## ")) {
+      flushParagraph();
+      chunks.push(`<h2 class="md-h2">${escapeHtml(line.slice(3))}</h2>`);
+      continue;
+    }
+    if (line.startsWith("### ")) {
+      flushParagraph();
+      chunks.push(`<h3 class="md-h3">${escapeHtml(line.slice(4))}</h3>`);
+      continue;
+    }
+    if (/^\d+\.\s/.test(line)) {
+      flushParagraph();
+      const number = line.match(/^(\d+)\./)?.[1] || "•";
+      chunks.push(`<div class="md-step"><span>${number}</span><p>${inline(line.replace(/^\d+\.\s/, ""))}</p></div>`);
+      continue;
+    }
+    if (line.startsWith("- ")) {
+      flushParagraph();
+      chunks.push(`<div class="md-bullet"><span>✓</span><p>${inline(line.slice(2))}</p></div>`);
+      continue;
+    }
+    paragraph.push(line);
+  }
+  flushParagraph();
+  flushTable();
+  return chunks.join("") || "<p>(No readable content)</p>";
+}
+
+function renderDoneSummary(summary) {
+  $("#done-headline").textContent = summary.headline || "Completed work is summarized here.";
+  const cards = [
+    ["Total complete", summary.total || 0, "◈"],
+    ["Auto-handled", summary.by_resolution?.auto_handled || 0, "✦"],
+    ["Approval-routed", summary.by_resolution?.pending_approval || 0, "◇"],
+  ];
+  $("#done-stats-grid").replaceChildren(...cards.map(([label, value, icon]) => {
+    const card = document.createElement("article");
+    card.className = "done-stat-card";
+    card.innerHTML = `<span>${icon}</span><strong>${value}</strong><small>${escapeHtml(label)}</small>`;
+    return card;
+  }));
+  const recent = (summary.recent || []).map(item => ({
+    status: item.resolution || "completed",
+    agent: item.autonomy_mode || "workflow",
+    source_file: item.subject || "Completed item",
+    timestamp: item.resolved_at,
+  }));
+  renderTimeline($("#done-recent-list"), recent.slice(0, 6));
+}
+
 function getItemType(item) {
   const meta = item.metadata || {};
   const name = item.name || "";
@@ -347,12 +446,14 @@ async function refreshStats({ quiet = false } = {}) {
 async function loadDashboard() {
   await refreshStats();
   try {
-    const [pending, digest] = await Promise.all([
+    const [pending, digest, doneSummary] = await Promise.all([
       apiFetch("/folder/pending_approval"),
       apiFetch("/digest"),
+      apiFetch("/done-summary"),
     ]);
     renderItems($("#attention-list"), (pending.items || []).slice(0, 6), true);
     renderDigest($("#digest-list"), digest.entries || [], digest.count, digest.batch_summary);
+    renderDoneSummary(doneSummary);
   } catch (error) { showToast(error.message, "error"); }
 }
 
@@ -453,6 +554,11 @@ async function openDetail(folder, name) {
       standardReader.classList.remove("hidden");
       $("#standard-body-parsed").innerHTML = parseTextToHtml(payload.body);
     }
+
+    const planTab = $("#tab-btn-plan");
+    const isPlan = folder === "plans" || /^#\s+Action Plan/m.test(payload.body || "");
+    planTab?.classList.toggle("hidden", !isPlan);
+    if (isPlan) $("#plan-body-parsed").innerHTML = renderMarkdown(payload.body);
 
     // Populate Metadata Grid
     const metadataGrid = $("#modal-metadata");

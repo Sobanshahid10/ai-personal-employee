@@ -16,6 +16,7 @@ import config
 from approval_watcher import watch as watch_approvals
 from gmail_watcher import run_watcher as watch_gmail
 from job_search_agent import run_job_search
+from reasoning_loop import run_once as run_reasoning_once
 
 
 # scripts/main.py starts with scripts/ on sys.path; add only the project root so
@@ -64,10 +65,25 @@ class ChiefMindRuntime:
         # serve_forever exits when shutdown() is called by the main thread.
         self.dashboard_server.serve_forever()
 
+    def _reasoning_backlog(self, stop_event: threading.Event) -> None:
+        """Drain Needs_Action on startup and on a steady interval."""
+        while not stop_event.is_set():
+            try:
+                completed = run_reasoning_once()
+                if completed:
+                    LOGGER.info(
+                        "Reasoning backlog processed %s item(s).", completed
+                    )
+            except Exception:
+                LOGGER.exception("Reasoning backlog sweep failed.")
+            if stop_event.wait(config.REASONING_BACKLOG_INTERVAL):
+                break
+
     def start(self) -> None:
         services = self.services or {
             "approval_watcher": lambda event: watch_approvals(event),
             "gmail_watcher": lambda event: watch_gmail(stop_event=event),
+            "reasoning_backlog": self._reasoning_backlog,
             "dashboard": self._dashboard,
         }
         if self.services is None and config.JOB_SEARCH_ENABLED:
