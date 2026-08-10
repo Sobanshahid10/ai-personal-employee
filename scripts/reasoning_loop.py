@@ -413,11 +413,20 @@ def classify_item(client: Groq, item: SourceItem) -> Decision:
 
 
 def draft_email(
-    client: Groq,
+    client: Groq | None,
     item: SourceItem,
     knowledge_context: str,
 ) -> str:
     """Generate the exact immutable reply body at the mandated temperature."""
+    if client is None:
+        sender_name = parseaddr(item.sender)[0] or "there"
+        return (
+            f"Hello {sender_name},\n\n"
+            f"Thank you for reaching out regarding '{item.subject}'. "
+            "I have received your message and staged it for review.\n\n"
+            "Best regards,\nSoban"
+        )
+
     system_prompt = """You draft professional email replies for ChiefMind.
 Return ONLY the complete reply body: no subject line, analysis, JSON, markdown
 fence, or commentary. Ground policy claims only in the supplied knowledge
