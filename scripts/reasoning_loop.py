@@ -375,9 +375,9 @@ Return ONLY a JSON object with exactly these keys:
 
 Rules:
 - Do not treat marketing words like "urgent" as proof of importance.
-- Automated notifications and logs are often INFORMATION_ONLY or ROUTINE_ACTION with
-  action_required false and reply_intent "none".
-- EXTERNAL_COMMUNICATION applies when a human-visible reply may be needed.
+- Automated notifications, sponsored emails, marketing offers, newsletters, advertisements, social updates, bulk announcements, event invitations, webinars, and promotional mail MUST have action_required: false and reply_intent: "none" unless explicitly addressed to the user personally by a human contact asking for specific custom work.
+- Automated notifications and logs are INFORMATION_ONLY or ROUTINE_ACTION with action_required false and reply_intent "none".
+- EXTERNAL_COMMUNICATION applies only when a personalized human-visible email reply is strictly needed for direct communication with a real person.
 - Never claim an action was executed."""
     user_prompt = (
         f"Operator policy excerpt:\n{policy_prompt_excerpt(policy)}\n\n"

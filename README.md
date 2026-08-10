@@ -2,137 +2,109 @@
 
 # 🧠 ChiefMind — Autonomous AI Personal Employee
 
-**A production-grade, local-first AI personal executive assistant.**  
-Grounded reasoning · Immutable human-in-the-loop approval · Zero-cloud file state · Live glassmorphic dashboard · Audit receipts
+**A production-grade, local-first AI personal executive assistant and autonomous workflow engine.**
 
-[![Python](https://img.shields.io/badge/Python-3.11%20|%203.12-3776ab?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
-[![Flask](https://img.shields.io/badge/Flask-3.1-000000?style=flat-square&logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
-[![Groq](https://img.shields.io/badge/Groq-Llama--3.3--70b-f05032?style=flat-square)](https://groq.com/)
-[![Gmail API](https://img.shields.io/badge/Gmail%20API-OAuth%202.0-ea4335?style=flat-square&logo=gmail&logoColor=white)](https://developers.google.com/gmail/api)
-[![Watchdog](https://img.shields.io/badge/Watchdog-File%20Monitoring-4b5563?style=flat-square)](https://python-watchdog.readthedocs.io/)
-[![MCP Protocol](https://img.shields.io/badge/MCP-Model%20Context%20Protocol-8a2be2?style=flat-square)](https://modelcontextprotocol.io/)
-[![License](https://img.shields.io/badge/License-MIT-22c55e?style=flat-square)](LICENSE)
-[![Deployment](https://img.shields.io/badge/Daemon-launchd%20%7C%20systemd-0078d4?style=flat-square)](docs/DEPLOYMENT.md)
+Grounded Reasoning · Cryptographic Approval Gate · Zero-Cloud File State · Real-Time Glassmorphic Dashboard · Audit Receipts
+
+<br/>
+
+[![Python](https://img.shields.io/badge/Python-3.11%20%7C%203.12-3776ab?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![Flask](https://img.shields.io/badge/Flask-3.1-000000?style=for-the-badge&logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
+[![Groq](https://img.shields.io/badge/Groq-Llama--3.3--70b-f05032?style=for-the-badge)](https://groq.com/)
+[![Gmail API](https://img.shields.io/badge/Gmail%20API-OAuth%202.0-ea4335?style=for-the-badge&logo=gmail&logoColor=white)](https://developers.google.com/gmail/api)
+[![Watchdog](https://img.shields.io/badge/Watchdog-File%20Monitoring-4b5563?style=for-the-badge)](https://python-watchdog.readthedocs.io/)
+[![MCP Protocol](https://img.shields.io/badge/MCP-Model%20Context%20Protocol-8a2be2?style=for-the-badge)](https://modelcontextprotocol.io/)
+[![License](https://img.shields.io/badge/License-MIT-22c55e?style=for-the-badge)](LICENSE)
+[![Deployment](https://img.shields.io/badge/Daemon-launchd%20%7C%20systemd-0078d4?style=for-the-badge)](docs/DEPLOYMENT.md)
 
 </div>
 
 ---
 
-**ChiefMind** is an autonomous AI Personal Employee that monitors intake channels (Gmail, LinkedIn, Job Feeds), parses unstructured communications into structured workflow state, performs grounded multi-step reasoning using Groq LLM + local knowledge retrieval, and stages executable drafts—pausing before every external action to guarantee human-in-the-loop authorization.
+## 💡 What is ChiefMind?
 
-> 🛡 **Human-in-the-Loop Invariant:** LLM classifications and drafts **never execute external actions autonomously**. External emails or posts are dispatched **only** when a human explicitly approves an immutable artifact (`Pending_Approval/` → `Approved/`) through the local dashboard.
+**ChiefMind** is an autonomous AI Personal Employee designed to manage daily operations, communications, and job leads. It continuously monitors intake channels (Gmail, LinkedIn, Job Feeds), parses unstructured messages into structured file-system state, performs grounded multi-step reasoning using Groq LLM and local knowledge retrieval, and stages executable drafts—pausing before every external action to guarantee human-in-the-loop authorization.
+
+> [!IMPORTANT]
+> **Human-in-the-Loop Invariant (Rule 4):**
+> LLM classifications and generated drafts **never execute external actions autonomously**. Outbound emails or posts are dispatched **only** when a human explicitly approves an immutable artifact (`Pending_Approval/` → `Approved/`) through the protected local dashboard interface.
 
 ---
 
-## 📸 Executive Dashboard & System Interface
+## 🌟 Key Features
 
-<div align="center">
-
-| Feature View | Capability |
+| Capability | Highlights & Mechanism |
 | :--- | :--- |
-| **KPI Metrics & Quick Stats** | Live tracking of Pending Approvals, Auto-Handled emails, Action Plans, Done ledger, and Failed items |
-| **1-Click Human Approval** | Direct, single-click Approve/Reject buttons with SHA-256 draft integrity checks |
-| **Rich Email & Plan Reader** | Full formatted reader displaying email subjects, senders, and action plan steps instead of raw IDs |
-| **Autonomy & Audit Stream** | Live timeline of auto-handled routine mail, classification decisions, and execution receipts |
-
-</div>
-
----
-
-## 🔍 Core System Capabilities
-
-### 📬 Autonomous Intake & File-System State Machine
-- **Gmail Watcher Daemon**: Polls unread emails at configurable intervals, parses plain text, strips HTML bloat, and stages deterministic YAML/Markdown artifacts.
-- **Zero-Cloud Storage**: Workflow state relies entirely on local file system directories (`Inbox`, `Needs_Action`, `Plans`, `Pending_Approval`, `Approved`, `Rejected`, `Done`, `Failed`). No external database required.
-- **Idempotency Engine**: Uses unique Gmail Message IDs and SHA-256 hashes stored in `processed_ids.json` to prevent duplicate ingestion.
-
-### 🧠 Grounded Reasoning & Knowledge Retrieval
-- **Knowledge Retriever (`knowledge.py`)**: Tokenizes queries against `docs/KnowledgeBase.md` to extract exact, auditable reference sections before invoking LLMs.
-- **Structured Reasoning Engine (`reasoning_loop.py`)**: Uses Groq (`llama-3.3-70b-versatile`) with temperature `0.0` for deterministic classification and `0.3` for email drafting.
-- **Autonomous Policy Routing**: Low-impact notification mail is automatically summarized into daily digests, while actionable requests require human approval.
-
-### 🛡 Cryptographic Approval & Execution Gate
-- **SHA-256 Integrity Checks**: Approvals store a `draft_sha256` hash of the exact proposed reply text. If a draft is modified without re-authorization, execution fails closed.
-- **Approval Watcher Daemon (`approval_watcher.py`)**: Monitors `Approved/`, validates schemas and rate limits, reserves action IDs in `execution_receipts.json`, and dispatches external I/O.
-- **Zero LLM Re-Generation**: The executor sends the exact approved text word-for-word. The LLM is never called during execution.
-
-### 🖥 Real-Time Glassmorphic Web Dashboard
-- **Flask REST API & Modern SPA**: Real-time KPI summary, category filtering (Emails, LinkedIn, Plans, Manual), and item details.
-- **1-Click Approval Interface**: Single-click Approve / Reject workflow with instant toast notifications.
-- **Developer Profile Card**: Integrated developer identity overlay.
-
-### 💼 Technical Job Discovery Agent
-- **Automated Lead Scoring**: Scrapes technical job feeds, cross-references skills against `candidate_profile.json`, filters senior/unrelated/foreign roles, and stages actionable leads.
+| 📬 **Autonomous Intake Engine** | Daemon polls unread emails, strips HTML bloat, extracts plain text, and stages deterministic Markdown/YAML artifacts in `Needs_Action/`. Uses unique Gmail Message IDs to prevent duplicate processing. |
+| 🧠 **Grounded Knowledge Reasoning** | Integrates local keyword retriever (`knowledge.py`) to search `docs/KnowledgeBase.md` before prompting Groq (`llama-3.3-70b-versatile`). Prevents hallucinations and ensures auditable responses. |
+| 🛡 **Cryptographic SHA-256 Approval Gate** | Pending proposals include a `draft_sha256` hash of the exact proposed reply. If modified without re-authorization, execution fails closed. Execution uses exact approved text with zero LLM re-generation. |
+| 🖥 **Live Glassmorphic Dashboard** | Single-page web dashboard built with Flask and Vanilla CSS/JS featuring live KPI tracking, instant 1-click Approve/Reject buttons, activity timeline, and auto-handled daily digest views. |
+| 💼 **Technical Job Lead Finder** | Autonomous background process scrapes remote technical job feeds, scores candidate skill matches against `candidate_profile.json`, filters irrelevant roles, and stages verified leads. |
+| 🔌 **Model Context Protocol (MCP) Server** | Node.js MCP server in `mcp-servers/gmail-send/` exposing explicit development tool integration for desktop agent host execution. |
 
 ---
 
 ## 📐 System Architecture & Workflow Pipeline
 
-```
- ┌────────────────┐
- │  Gmail Inbox   │
- └───────┬────────┘
-         │ Ingestion & Deduplication
-         ▼
- ┌────────────────┐
- │ Gmail Watcher  │ ──► Writes to Needs_Action/*.md
- └───────┬────────┘
-         │ Triggers
-         ▼
- ┌────────────────────────────────────────────────────────┐
- │                   Reasoning Agent                      │
- │  1. Knowledge Base Retrieval (KnowledgeBase.md)       │
- │  2. Groq LLM Classification & Assessment (Temp 0.0)    │
- │  3. Draft Generation & SHA-256 Hashing (Temp 0.3)      │
- └───────┬────────────────────────────────────────────────┘
-         │
-         ├───[Routine / Notification] ──► Summarized in Daily Digest ──► Done/*.md
-         │
-         └───[Action Required] ──► Creates Plans/*.md + Pending_Approval/*.md
-                                        │
-                                        ▼
-                         ┌─────────────────────────────┐
-                         │  Human Reviewer (Dashboard) │
-                         │  • 1-Click Approve / Reject │
-                         └──────────────┬──────────────┘
-                                        │ Moves File
-                                        ▼
-                                 Approved/*.md
-                                        │
-                                        ▼
-                         ┌─────────────────────────────┐
-                         │      Approval Watcher       │
-                         │  • Check SHA-256 Hash       │
-                         │  • Rate Limit Check         │
-                         │  • Reserve Action ID        │
-                         └──────────────┬──────────────┘
-                                        │
-                                        ▼
-                         ┌─────────────────────────────┐
-                         │      Execution Agent        │
-                         │  • Gmail API Send           │
-                         │  • LinkedIn Poster          │
-                         └──────────────┬──────────────┘
-                                        │
-                                        ▼
-                                   Done/*.md
-                         + execution_receipts.json
+```mermaid
+flowchart TD
+    %% Custom Styling
+    classDef inputStyle fill:#1e293b,stroke:#3b82f6,stroke-width:2px,color:#fff;
+    classDef processStyle fill:#0f172a,stroke:#8b5cf6,stroke-width:2px,color:#fff;
+    classDef stateStyle fill:#1e1e2e,stroke:#06b6d4,stroke-width:2px,color:#fff;
+    classDef gateStyle fill:#312e81,stroke:#f59e0b,stroke-width:2px,color:#fff;
+    classDef execStyle fill:#064e3b,stroke:#10b981,stroke-width:2px,color:#fff;
+    classDef archiveStyle fill:#18181b,stroke:#64748b,stroke-width:2px,color:#fff;
+
+    subgraph Intake ["1. Ingestion Layer"]
+        A["📧 Gmail Inbox"]:::inputStyle -->|Polls unread mail| B["⚙️ Gmail Watcher Daemon"]:::processStyle
+        B -->|Stage Markdown| C["📁 Needs_Action/"]:::stateStyle
+    end
+
+    subgraph Reasoning ["2. Grounded Reasoning Layer"]
+        C --> D["🧠 Reasoning Agent"]:::processStyle
+        KB["📚 KnowledgeBase.md"]:::inputStyle -->|TF-IDF Retrieval| D
+        Groq["⚡ Groq API (llama-3.3-70b)"]:::inputStyle -->|Deterministic Temp 0.0/0.3| D
+    end
+
+    subgraph Evaluation ["3. Routing & Decision Gate"]
+        D -->|Low Impact / Routine| E["📋 Daily Digest Summary"]:::archiveStyle
+        D -->|Actionable Request| F["📁 Plans/ & Pending_Approval/"]:::gateStyle
+        E -->|Auto-Archive| K["📁 Done/"]:::archiveStyle
+    end
+
+    subgraph Approval ["4. Human-in-the-Loop Approval"]
+        F --> G["🖥️ Glassmorphic Dashboard"]:::gateStyle
+        G -->|Reject| H["📁 Rejected/"]:::archiveStyle
+        G -->|1-Click Approve| I["📁 Approved/"]:::gateStyle
+    end
+
+    subgraph Execution ["5. Deterministic Execution"]
+        I --> J["⚙️ Approval Watcher Daemon"]:::execStyle
+        J -->|Verify SHA-256 Hash & Rate Limits| L{"Execution Target"}:::execStyle
+        L -->|Email Draft| M["📤 Gmail API Send"]:::execStyle
+        L -->|LinkedIn Post| N["📢 LinkedIn Poster"]:::execStyle
+        M --> K
+        N --> K
+    end
 ```
 
 ---
 
 ## 📑 Human-in-the-Loop State Machine Contract
 
-| State Directory | Purpose | Immutable? | Triggered Action |
+State transition workflow relies strictly on local directories. Every state transition is atomic and auditable.
+
+| State Directory | Purpose | Written By | Triggered Action |
 | :--- | :--- | :--- | :--- |
-| `Inbox/` | Raw intake landing directory | No | Ingested by Gmail Watcher |
-| `Needs_Action/` | Staged un-processed items requiring reasoning | No | Processed by Reasoning Agent |
-| `Plans/` | Generated step-by-step action plans | Yes | Displayed on Dashboard |
-| `Pending_Approval/` | Staged proposals awaiting human approval | Yes | Human review in Dashboard |
-| `Approved/` | Human-approved items queued for execution | Yes | Picked up by Approval Watcher |
-| `Rejected/` | Human-rejected proposals | Yes | Archived locally, no external I/O |
-| `Done/` | Completed work with resolution metadata | Yes | Archived for audit ledger |
-| `Failed/` | Items failing validation or rate limits | Yes | Requires manual inspection |
+| `Inbox/` | Intake landing folder for raw files | Operator / Systems | Ingested by `gmail_watcher.py` |
+| `Needs_Action/` | Staged un-processed items requiring LLM analysis | Gmail Watcher | Processed by `reasoning_loop.py` |
+| `Plans/` | Generated step-by-step resolution plans | Reasoning Agent | Rendered in Dashboard UI |
+| `Pending_Approval/` | Staged proposals awaiting human approval | Reasoning Agent | Human review via Dashboard |
+| `Approved/` | Human-authorized items queued for dispatch | Dashboard User | Picked up by `approval_watcher.py` |
+| `Rejected/` | User-rejected proposals | Dashboard User | Archived locally (no external action) |
+| `Done/` | Fully executed items with audit metadata | Approval Watcher | Historical ledger & metrics |
+| `Failed/` | Items failing schema checks or rate limits | System Daemons | Quarantined for developer inspection |
 
 ---
 
@@ -140,30 +112,30 @@ Grounded reasoning · Immutable human-in-the-loop approval · Zero-cloud file st
 
 ### Prerequisites
 - **Python 3.11+**
-- **Node.js 18+** (for dev MCP server & frontend assets)
+- **Node.js 18+** (for dev MCP server & frontend tooling)
 - **`uv` Package Manager**
 
 ```bash
-# Verify runtimes
+# Verify environment runtimes
 python3 --version
 node --version
 uv --version
 ```
 
-If `uv` is not installed:
+If `uv` is not installed, install it via:
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 ---
 
-### Step 1 — Clone & Install Dependencies
+### Step 1 — Clone Repository & Install Dependencies
 
 ```bash
 git clone https://github.com/Sobanshahid10/ai-personal-employee.git
 cd ai-personal-employee
 
-# Install Python dependencies using uv
+# Install dependencies into virtualenv using uv
 uv pip install flask pyyaml python-dotenv groq google-api-python-client google-auth-httplib2 google-auth-oauthlib watchdog
 ```
 
@@ -171,99 +143,114 @@ uv pip install flask pyyaml python-dotenv groq google-api-python-client google-a
 
 ### Step 2 — Configure Environment Variables
 
-Create `.env` from the template:
+Copy the template file to create your active `.env` configuration:
+
 ```bash
 cp scripts/.env.example scripts/.env
 ```
 
-Edit `scripts/.env` with your real keys:
+Edit `scripts/.env` with your API credentials and security token:
+
 ```dotenv
+# API Keys & Secrets
 GROQ_API_KEY=gsk_your_real_groq_api_key_here
-DASHBOARD_APPROVAL_TOKEN=your_secure_approval_token
+DASHBOARD_APPROVAL_TOKEN=your_secure_approval_token_here
+
+# Runtime Settings
 GMAIL_POLL_INTERVAL=120
 GMAIL_QUERY=is:unread
+DASHBOARD_HOST=127.0.0.1
+DASHBOARD_PORT=5055
+
+# Execution Controls
 LINKEDIN_MODE=mock
 AUTO_LINKEDIN_POSTS=false
+MAX_EMAIL_SENDS_PER_HOUR=10
+MAX_EXTERNAL_ACTIONS_PER_DAY=50
 ```
 
 ---
 
 ### Step 3 — Authenticate Gmail OAuth
 
-Place your Google Cloud OAuth client file as `credentials/credentials.json`, then run:
+Place your Google Cloud OAuth client secrets file as `credentials/credentials.json`, then execute:
 
 ```bash
 uv run python scripts/authenticate_gmail.py
 ```
-*This opens Google OAuth in your browser and saves `credentials/token.json`.*
+> *This launches a browser session to perform Google OAuth authorization and atomically saves `credentials/token.json`.*
 
 ---
 
-### Step 4 — Run ChiefMind Supervisor
+### Step 4 — Launch ChiefMind Supervisor
 
-Launch all services (Gmail intake, approval watcher, reasoning loop, and web dashboard) in a single command:
+Start all core services (Gmail intake daemon, reasoning engine, approval watcher, and web dashboard) via the unified supervisor:
 
 ```bash
 uv run python scripts/main.py
 ```
 
-Open your browser to: **[http://127.0.0.1:5055](http://127.0.0.1:5055)**
+Access the Executive Dashboard at: **[http://127.0.0.1:5055](http://127.0.0.1:5055)**
 
 ---
 
-## ⚙ Environment Variables Reference
+## ⚙️ Environment Variables Reference
 
-| Variable | Description | Default | Required |
+| Variable | Description | Default Value | Required |
 | :--- | :--- | :--- | :--- |
 | `GROQ_API_KEY` | Groq API Key for LLM classification & drafting | `""` | **Yes** |
-| `GROQ_MODEL` | Groq LLM model name | `llama-3.3-70b-versatile` | No |
-| `GMAIL_QUERY` | Gmail search query filter | `is:unread` | No |
-| `GMAIL_POLL_INTERVAL` | Interval in seconds between Gmail syncs (min 60s) | `120` | No |
-| `DASHBOARD_HOST` | Host address for web dashboard | `127.0.0.1` | No |
-| `DASHBOARD_PORT` | HTTP port for web dashboard | `5055` | No |
-| `DASHBOARD_APPROVAL_TOKEN` | Optional token secret for API approvals | `""` | No |
-| `LINKEDIN_MODE` | Execution mode for LinkedIn (`mock`, `live`, `browser`) | `mock` | No |
-| `MAX_EMAIL_SENDS_PER_HOUR` | Fail-closed hourly rate limit for emails | `10` | No |
-| `MAX_EXTERNAL_ACTIONS_PER_DAY` | Fail-closed daily external action limit | `50` | No |
+| `GROQ_MODEL` | Target Groq LLM model architecture | `llama-3.3-70b-versatile` | No |
+| `GMAIL_QUERY` | Gmail search filter for intake polling | `is:unread` | No |
+| `GMAIL_POLL_INTERVAL` | Polling frequency in seconds (minimum 60s) | `120` | No |
+| `DASHBOARD_HOST` | Host interface binding for REST API & Dashboard | `127.0.0.1` | No |
+| `DASHBOARD_PORT` | HTTP port for REST API & Dashboard | `5055` | No |
+| `DASHBOARD_APPROVAL_TOKEN` | Bearer token secret required for approval API calls | `""` | Optional |
+| `LINKEDIN_MODE` | Execution mode for LinkedIn adapter (`mock`, `live`, `browser`) | `mock` | No |
+| `MAX_EMAIL_SENDS_PER_HOUR` | Outbound email hourly rate-limit threshold | `10` | No |
+| `MAX_EXTERNAL_ACTIONS_PER_DAY` | Circuit breaker threshold for daily external actions | `50` | No |
 
 ---
 
 ## 📋 REST API Reference
 
+The Flask backend serves both the SPA layout and JSON endpoints for system management:
+
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `GET` | `/` | Serves the single-page dashboard UI |
-| `GET` | `/api/stats` | Fetches real-time counts, KPIs, and recent timeline |
-| `GET` | `/api/folder/<key>` | Lists all Markdown items in a folder (`pending_approval`, `plans`, `done`, etc.) |
-| `GET` | `/api/file/<folder>/<name>` | Reads file frontmatter metadata and parsed body |
+| `GET` | `/` | Serves the single-page glassmorphic dashboard web application |
+| `GET` | `/api/stats` | Returns real-time KPI counts, execution stats, and recent event logs |
+| `GET` | `/api/folder/<key>` | Lists Markdown items in state folder (`pending_approval`, `plans`, `done`, `failed`) |
+| `GET` | `/api/file/<folder>/<name>` | Returns frontmatter metadata and parsed body content of a specific file |
 | `POST` | `/api/approve/<name>` | Atomically moves item from `Pending_Approval/` to `Approved/` |
 | `POST` | `/api/reject/<name>` | Atomically moves item from `Pending_Approval/` to `Rejected/` |
-| `GET` | `/api/logs` | Fetches daily audit log events |
+| `GET` | `/api/logs` | Retrieves system-wide combined audit log events |
 | `GET` | `/api/digest` | Returns auto-handled daily digest summaries |
-| `GET` | `/api/done-summary` | Returns completed work statistics and ledger |
+| `GET` | `/api/done-summary` | Returns detailed statistics and ledger of completed tasks |
 
 ---
 
 ## 🧪 Automated Testing Suite
 
-Run the full automated unit and pipeline test suite:
+The repository includes a comprehensive unit and end-to-end simulation test suite. Run tests using `unittest`:
 
 ```bash
-# Run dashboard API tests
+# Run Flask REST API & Dashboard tests
 uv run python -m unittest dashboard/test_app.py
 
-# Run core script & workflow tests
+# Run script modules and workflow pipeline tests
 uv run python -m unittest discover -s scripts
 ```
 
-| Test File | Description / Coverage |
+### Test Suite Breakdown
+
+| Test Script | Coverage & Validation Focus |
 | :--- | :--- |
-| `dashboard/test_app.py` | Tests all REST API endpoints, CORS preflight, approval moves, and file safety |
-| `scripts/test_pipeline.py` | End-to-end simulation of email intake → plan creation → approval → execution |
-| `scripts/test_reasoning_loop.py` | Tests Groq LLM prompt parsing, decision mapping, and plan formatting |
-| `scripts/test_approval_watcher.py` | Tests SHA-256 draft integrity verification, rate limiting, and receipt ledger |
-| `scripts/test_knowledge.py` | Tests TF-IDF keyword overlap retriever over `KnowledgeBase.md` |
-| `scripts/test_linkedin_poster.py` | Tests LinkedIn mock execution and Posts API payload formatting |
+| `dashboard/test_app.py` | Validates REST API endpoints, CORS policies, atomic file moves, path traversal prevention, and payload rendering. |
+| `scripts/test_pipeline.py` | End-to-end integration test simulating email intake → reasoning → draft hashing → approval → external send. |
+| `scripts/test_reasoning_loop.py` | Validates Groq LLM prompt parsing, decision mapping, digest generation, and plan formatting. |
+| `scripts/test_approval_watcher.py` | Tests SHA-256 draft integrity checks, rate limit circuit breakers, and receipt ledger writes. |
+| `scripts/test_knowledge.py` | Tests TF-IDF keyword extraction and document section retrieval over `KnowledgeBase.md`. |
+| `scripts/test_linkedin_poster.py` | Validates LinkedIn mock mode execution and Posts API request formatting. |
 
 ---
 
@@ -271,71 +258,55 @@ uv run python -m unittest discover -s scripts
 
 ```
 ai-personal-employee/
-├── AGENTS.md                    # Core agent specifications & contracts
-├── README.md                    # Master documentation
+├── AGENTS.md                    # System architectural contracts & agent rules
+├── README.md                    # Project documentation hub
 ├── dashboard/
-│   ├── app.py                   # Flask REST API server
-│   ├── test_app.py              # Dashboard API test suite
-│   ├── static/
-│   │   ├── index.html           # Single-page app layout
-│   │   ├── app.js               # Dynamic SPA logic & 1-click approvals
-│   │   └── style.css            # Dark glassmorphic design system
-│   └── templates/
+│   ├── app.py                   # Flask REST API server backend
+│   ├── test_app.py              # API test suite
+│   └── static/
+│       ├── index.html           # Dashboard single-page application layout
+│       ├── app.js               # Dynamic UI rendering & approval logic
+│       └── style.css            # Dark glassmorphic design system styling
 ├── docs/
-│   ├── DEPLOYMENT.md            # Production launchd/systemd deployment guide
-│   ├── GUARDRAILS.md             # Security policies & rate limit rules
-│   └── KnowledgeBase.md         # Reference knowledge base for grounding
+│   ├── DEPLOYMENT.md            # Daemon deployment guide (launchd / systemd)
+│   ├── GUARDRAILS.md            # Security rules & rate limit policies
+│   └── KnowledgeBase.md         # Reference knowledge document for grounding
 ├── scripts/
 │   ├── .env.example             # Environment template
-│   ├── config.py                # Centralized paths and settings loader
-│   ├── authenticate_gmail.py    # Interactive OAuth setup utility
-│   ├── gmail_watcher.py         # Gmail intake daemon
-│   ├── reasoning_loop.py        # LLM reasoning & plan generator
-│   ├── knowledge.py             # Knowledge retrieval engine
-│   ├── approval_watcher.py      # Execution agent & approval daemon
-│   ├── linkedin_poster.py       # LinkedIn posting adapter
-│   ├── job_search_agent.py      # Technical job lead discovery
-│   ├── workflow_utils.py        # File-system utilities & frontmatter parser
-│   ├── main.py                  # Unified multi-thread supervisor
-│   └── test_*.py                # Component test files
-├── mcp-servers/gmail-send/      # Development-only MCP server
-├── launchd/                     # macOS LaunchAgent templates (.plist)
-├── systemd/                     # Linux systemd service templates (.service)
-├── Inbox/                       # Intake landing folder
-├── Needs_Action/                # Staged un-processed items
-├── Plans/                       # Generated step-by-step action plans
+│   ├── config.py                # Centralized paths and configuration loader
+│   ├── authenticate_gmail.py    # Interactive Gmail OAuth setup script
+│   ├── gmail_watcher.py         # Gmail polling & intake daemon
+│   ├── reasoning_loop.py        # LLM reasoning & plan drafting agent
+│   ├── knowledge.py             # Keyword retrieval module
+│   ├── approval_watcher.py      # Execution agent & approval monitor
+│   ├── linkedin_poster.py       # LinkedIn API / mock adapter
+│   ├── job_search_agent.py      # Technical job lead discovery agent
+│   ├── workflow_utils.py        # Atomic file utilities & frontmatter parser
+│   ├── main.py                  # Multi-threaded supervisor entry point
+│   └── test_*.py                # Component test suites
+├── mcp-servers/gmail-send/      # Development-only MCP server (Node.js)
+├── launchd/                     # macOS LaunchAgent configuration templates
+├── systemd/                     # Linux systemd service configuration templates
+├── Inbox/                       # Landing folder for incoming data
+├── Needs_Action/                # Staged intake files awaiting analysis
+├── Plans/                       # Step-by-step action plans
 ├── Pending_Approval/            # Proposals awaiting human approval
-├── Approved/                    # Items approved for execution
-├── Rejected/                    # Human-rejected items
-├── Done/                        # Completed items archive
-├── Failed/                      # Quarantined failed items
-└── Logs/                        # Rotating system logs & execution receipts
+├── Approved/                    # Approved proposals queued for execution
+├── Rejected/                    # User-rejected items archive
+├── Done/                        # Completed execution ledger
+├── Failed/                      # Quarantined failed execution items
+└── Logs/                        # Rotating system audit logs & receipts
 ```
 
 ---
 
-## 🛡 Invariants & Operational Security
+## 🛡 Security & Operational Invariants
 
-1. **Immutable Draft Execution**: The execution agent sends **only** the exact text authorized by the human. It never rewrites, summarizes, or calls an LLM during execution.
-2. **SHA-256 Cryptographic Hash Check**: Every `Pending_Approval` artifact includes a hash of the `draft_body`. Any post-approval modification invalidates the hash and aborts execution.
-3. **Atomic File Operations**: All state transitions use temporary file writes followed by atomic renames to prevent partial reads by background daemons.
-4. **Local-First State**: All logs, credentials, and state items remain strictly on local storage and are excluded from Git version control.
-5. **Fail-Closed Thresholds**: Outbound rate limits (hourly email send cap, daily total external action limit) enforce automated execution circuit breakers.
-
----
-
-## 🛠 Technology Stack Matrix
-
-| Layer | Technology | Purpose |
-| :--- | :--- | :--- |
-| **Language & Runtime** | Python 3.11+ | Core runtime across all services |
-| **Intake / Email API** | Gmail API · Google OAuth 2.0 | Message fetch, thread parsing & email dispatch |
-| **LLM Reasoning** | Groq (`llama-3.3-70b-versatile`) | Event assessment, policy evaluation & reply drafting |
-| **Knowledge Engine** | Custom TF-IDF Keyword Matcher | Auditable grounding over `KnowledgeBase.md` |
-| **Web Dashboard** | Flask 3.1 · HTML5 · Vanilla CSS · JS | Live monitoring UI & 1-click human approval gate |
-| **File Monitoring** | Python `watchdog` | File-system event watching for `Approved/` state |
-| **Package Manager** | `uv` | Fast dependency resolution & virtualenv management |
-| **Process Daemon** | launchd (macOS) / systemd (Linux) | Fault-isolated background daemon execution |
+1. **Immutable Draft Execution:** The execution agent dispatches **only** the exact text authorized by the human operator. It never rewrites, summarizes, or invokes an LLM during execution.
+2. **Cryptographic Draft Verification:** Approval artifacts store a SHA-256 hash (`draft_sha256`) of the proposed body. Any unauthorized post-approval modification invalidates the hash and aborts execution.
+3. **Atomic File Transitions:** All file-system operations write to temporary files before performing atomic renames, preventing partial reads by background threads.
+4. **Local-First Privacy:** All credentials, tokens, logs, and workflow files remain on local storage and are strictly excluded from git tracking.
+5. **Fail-Closed Thresholds:** Enforces hourly email caps and daily action circuit breakers to prevent run-away background execution.
 
 ---
 
@@ -346,10 +317,12 @@ AI Engineer
 Department of Artificial Intelligence  
 University of Management and Technology, Lahore, Pakistan  
 
-[![GitHub](https://img.shields.io/badge/GitHub-Sobanshahid10-181717?style=flat-square&logo=github)](https://github.com/Sobanshahid10/ai-personal-employee)
+[![GitHub](https://img.shields.io/badge/GitHub-Sobanshahid10-181717?style=for-the-badge&logo=github)](https://github.com/Sobanshahid10/ai-personal-employee)
 
 ---
 
 <div align="center">
-<sub>ChiefMind is designed for total human agency. AI generates recommendations — humans retain absolute authority.</sub>
+
+<sub>ChiefMind is built for absolute human agency. AI generates recommendations — humans retain absolute control.</sub>
+
 </div>

@@ -71,6 +71,17 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   display: none !important;
 }
 
+.view-description {
+  margin: 0.25rem 0 0 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.done-summary-panel {
+  margin-bottom: 1.5rem;
+}
+
 /* Ambient Background Light Orbs */
 .ambient {
   position: fixed;

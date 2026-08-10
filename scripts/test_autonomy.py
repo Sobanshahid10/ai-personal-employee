@@ -95,6 +95,28 @@ class AutonomyPolicyTests(unittest.TestCase):
         self.assertIsNotNone(assessment)
         self.assertFalse(assessment.action_required)
 
+    def test_substack_marketing_email_is_routine(self) -> None:
+        assessment = assess_routine_notification(
+            policy=DEFAULT_POLICY,
+            sender="AI Weekly <digest@substack.com>",
+            subject="The latest in AI & Tech Edition #42",
+            body="Here is your weekly recap of AI news. Unsubscribe anytime.",
+        )
+
+        self.assertIsNotNone(assessment)
+        self.assertFalse(assessment.action_required)
+
+    def test_sponsored_in_body_is_routine(self) -> None:
+        assessment = assess_routine_notification(
+            policy=DEFAULT_POLICY,
+            sender="Tech Partner <news@techpartner.io>",
+            subject="Exclusive Web Development Insights",
+            body="Sponsored content by Acme Corp: Try our special offer today!",
+        )
+
+        self.assertIsNotNone(assessment)
+        self.assertFalse(assessment.action_required)
+
     def test_no_action_routes_to_auto_summarize(self) -> None:
         assessment = EventAssessment(
             action_required=False,

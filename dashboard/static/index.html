@@ -80,8 +80,9 @@
         <button class="menu-button" id="menu-button" aria-label="Toggle navigation" aria-expanded="false">☰</button>
         
         <div class="topbar-left">
-          <p class="eyebrow">Autonomous Executive Assistant</p>
+          <p class="eyebrow" id="view-eyebrow">Autonomous Executive Assistant</p>
           <h1 id="view-title">Dashboard</h1>
+          <p class="view-description" id="view-description">Executive overview &amp; real-time system metrics</p>
         </div>
 
         <div class="search-box-wrapper">
@@ -155,8 +156,8 @@
           <article class="glass-panel span-two">
             <div class="section-heading">
               <div>
-                <p class="eyebrow">Action Items</p>
-                <h2>Needs Your Attention</h2>
+                <p class="eyebrow">Action Approvals Queue</p>
+                <h2>Pending Approval</h2>
               </div>
               <div class="heading-controls">
                 <button class="text-button" data-go="pending_approval">View All Pending →</button>
@@ -178,19 +179,6 @@
           <article class="glass-panel span-two">
             <div class="section-heading">
               <div>
-                <p class="eyebrow">Completion Ledger</p>
-                <h2>Done Summary</h2>
-              </div>
-              <button class="text-button" data-go="done">Open Done Queue →</button>
-            </div>
-            <p class="done-headline" id="done-headline">Loading completed work…</p>
-            <div class="done-stats-grid" id="done-stats-grid"></div>
-            <div id="done-recent-list" class="timeline compact"></div>
-          </article>
-
-          <article class="glass-panel span-two">
-            <div class="section-heading">
-              <div>
                 <p class="eyebrow">Autonomy Digest</p>
                 <h2>Handled Automatically Today</h2>
               </div>
@@ -202,10 +190,22 @@
 
       <!-- Folder / Workflow Items View -->
       <section class="view" id="view-folder" aria-labelledby="folder-title">
+        <!-- Dedicated Done Stats Panel (visible when viewing 'done' tab) -->
+        <article class="glass-panel done-summary-panel hidden" id="folder-done-summary-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Completion Ledger</p>
+              <h2>Done Summary Rollup</h2>
+            </div>
+          </div>
+          <p class="done-headline" id="done-headline">Loading completed work…</p>
+          <div class="done-stats-grid" id="done-stats-grid"></div>
+        </article>
+
         <article class="glass-panel">
           <div class="section-heading">
             <div>
-              <p class="eyebrow">Workflow Items</p>
+              <p class="eyebrow" id="folder-eyebrow">Workflow Items</p>
               <h2 id="folder-title">Items</h2>
             </div>
             <div class="heading-actions">

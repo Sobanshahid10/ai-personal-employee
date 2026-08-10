@@ -63,6 +63,7 @@ ROUTINE_NOTIFICATION_TERMS = (
     "digest",
     "daily update",
     "weekly update",
+    "weekly recap",
     "activity update",
     "viewed your profile",
     "appeared in searches",
@@ -89,6 +90,7 @@ ROUTINE_NOTIFICATION_TERMS = (
     "sale ends",
     "product update",
     "product updates",
+    "product announcement",
     "new in ",
     "picked for you",
     "top picks for you",
@@ -111,6 +113,19 @@ ROUTINE_NOTIFICATION_TERMS = (
     "accurate, explainable",
     "digital credential",
     "badge survey",
+    "webinar",
+    "webcast",
+    "masterclass",
+    "partner content",
+    "paid partnership",
+    "edition #",
+    "issue #",
+    "weekly digest",
+    "free trial",
+    "upgrade now",
+    "unlock access",
+    "community update",
+    "trending stories",
 )
 BULK_MARKETING_DOMAINS = frozenset(
     {
@@ -140,6 +155,23 @@ BULK_MARKETING_DOMAINS = frozenset(
         "credly.com",
         "marketing.pakwheels.com",
         "us.ibm.com",
+        "substack.com",
+        "medium.com",
+        "mailchimp.com",
+        "sendgrid.net",
+        "klaviyo.com",
+        "convertkit.com",
+        "beehiiv.com",
+        "constantcontact.com",
+        "campaign-monitor.com",
+        "hubspot.com",
+        "marketo.com",
+        "salesforce.com",
+        "intercom-mail.com",
+        "mailgun.org",
+        "eventbrite.com",
+        "luma.com",
+        "meetup.com",
     }
 )
 INFORMATIONAL_SECURITY_SUBJECTS = (
@@ -155,6 +187,9 @@ EXPLICIT_SPONSORED_TERMS = (
     "advertisement",
     "paid promotion",
     "promotional email",
+    "partner content",
+    "paid partnership",
+    "promotional offer",
 )
 PERSON_TO_PERSON_TERMS = (
     "sent you a message",
@@ -519,9 +554,9 @@ def assess_routine_notification(
         if not muted_sender and domain not in BULK_MARKETING_DOMAINS:
             return None
 
-    has_routine_signal = _contains_any(normalized_subject, ROUTINE_NOTIFICATION_TERMS)
+    has_routine_signal = _contains_any(early_content, ROUTINE_NOTIFICATION_TERMS)
     is_explicitly_sponsored = _contains_any(
-        normalized_subject, EXPLICIT_SPONSORED_TERMS
+        early_content, EXPLICIT_SPONSORED_TERMS
     )
     message_metadata = metadata or {}
     precedence = str(message_metadata.get("precedence", "")).strip().lower()
@@ -547,6 +582,7 @@ def assess_routine_notification(
         or (muted_sender and has_routine_signal)
         or (known_bulk_domain and (has_routine_signal or has_unsubscribe_footer))
         or (known_bulk_domain and muted_sender)
+        or (known_bulk_domain and has_bulk_header)
     ):
         return None
 
