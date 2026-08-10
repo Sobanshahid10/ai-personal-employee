@@ -56,20 +56,11 @@ function escapeHtml(str) {
     .replaceAll("'", "&#039;");
 }
 
-async function apiFetch(path, options = {}, mayPrompt = true) {
+async function apiFetch(path, options = {}) {
   const headers = new Headers(options.headers || {});
   const token = sessionStorage.getItem(TOKEN_KEY);
   if (token) headers.set("X-Approval-Token", token);
   const response = await fetch(`${API}${path}`, { ...options, headers });
-
-  if (response.status === 403 && mayPrompt) {
-    sessionStorage.removeItem(TOKEN_KEY);
-    const supplied = window.prompt("Approval token required. Enter it to continue:");
-    if (supplied?.trim()) {
-      sessionStorage.setItem(TOKEN_KEY, supplied.trim());
-      return apiFetch(path, options, false);
-    }
-  }
 
   let payload = {};
   try { payload = await response.json(); } catch { /* json parse error */ }
@@ -286,12 +277,19 @@ function itemCard(item, withActions = false) {
   typeTag.textContent = itemType.toUpperCase();
 
   const title = document.createElement("h3");
-  title.textContent = item.metadata?.subject || item.metadata?.summary || item.metadata?.action_id || item.name;
+  title.textContent = item.display_title || item.metadata?.subject || item.metadata?.summary || item.metadata?.draft_subject || item.metadata?.action_id || item.name;
 
   titleRow.append(typeTag, title);
 
   const detail = document.createElement("p");
-  const senderText = item.metadata?.from ? `From: ${item.metadata.from} · ` : "";
+  let senderText = "";
+  if (item.metadata?.from) {
+    senderText = `From: ${item.metadata.from} · `;
+  } else if (item.metadata?.to) {
+    senderText = `To: ${item.metadata.to} · `;
+  } else if (item.metadata?.category) {
+    senderText = `Category: ${item.metadata.category.replace(/_/g, " ")} · `;
+  }
   detail.textContent = `${senderText}${formatDate(item.modified_at)}`;
 
   main.append(titleRow, detail);
@@ -341,12 +339,13 @@ function filterItems(items) {
     const q = state.searchQuery.toLowerCase();
     filtered = filtered.filter(item => {
       const name = (item.name || "").toLowerCase();
+      const displayTitle = (item.display_title || "").toLowerCase();
       const subject = (item.metadata?.subject || "").toLowerCase();
       const from = (item.metadata?.from || "").toLowerCase();
       const summary = (item.metadata?.summary || "").toLowerCase();
       const actionId = (item.metadata?.action_id || "").toLowerCase();
       const preview = (item.body_preview || "").toLowerCase();
-      return name.includes(q) || subject.includes(q) || from.includes(q) || summary.includes(q) || actionId.includes(q) || preview.includes(q);
+      return name.includes(q) || displayTitle.includes(q) || subject.includes(q) || from.includes(q) || summary.includes(q) || actionId.includes(q) || preview.includes(q);
     });
   }
 
@@ -602,8 +601,6 @@ function closeDetail() {
 
 async function decide(name, action) {
   if (state.busy) return;
-  if (!window.confirm(`Are you sure you want to ${action === "approve" ? "APPROVE" : "REJECT"} "${name}"?`)) return;
-
   state.busy = true;
   try {
     await apiFetch(`/${action}/${encodeURIComponent(name)}`, { method: "POST" });

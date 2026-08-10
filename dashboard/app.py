@@ -133,6 +133,66 @@ def _safe_existing_file(folder: Path, name: str) -> Path:
     return resolved
 
 
+def _extract_display_title(
+    metadata: dict[str, Any],
+    body: str,
+    filename: str,
+) -> str:
+    """Extract a human-readable title from frontmatter or body content."""
+    for field in ("subject", "summary", "draft_subject"):
+        val = metadata.get(field)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+
+    if body:
+        match_subject = re.search(
+            r"^\s*\*?\*?Subject:\*?\*?\s*(.+)$",
+            body,
+            re.IGNORECASE | re.MULTILINE,
+        )
+        if match_subject and match_subject.group(1).strip():
+            return match_subject.group(1).strip()
+
+        match_overview = re.search(
+            r"^##\s+Overview\s*\n+([^\n#]+)",
+            body,
+            re.IGNORECASE | re.MULTILINE,
+        )
+        if match_overview and match_overview.group(1).strip():
+            text = match_overview.group(1).strip()
+            first_sentence = text.split(". ")[0].strip()
+            if len(first_sentence) > 90:
+                first_sentence = first_sentence[:87] + "..."
+            category = metadata.get("category")
+            cat_str = (
+                category.replace("_", " ").title()
+                if isinstance(category, str)
+                else ""
+            )
+            if cat_str and not first_sentence.lower().startswith(
+                cat_str.lower()
+            ):
+                return f"{cat_str}: {first_sentence}"
+            return first_sentence
+
+        for heading in re.findall(r"^#\s+(.+)$", body, re.MULTILINE):
+            heading_clean = heading.strip()
+            if (
+                heading_clean
+                and heading_clean.lower()
+                not in {"action plan", "overview", "workflow item"}
+            ):
+                return heading_clean
+
+    category = metadata.get("category")
+    if isinstance(category, str) and category.strip():
+        cat_str = category.replace("_", " ").title()
+        action_id = metadata.get("action_id", filename)
+        return f"{cat_str} ({action_id})"
+
+    return str(metadata.get("action_id") or filename)
+
+
 def _summarize_file(
     folder_key: str,
     path: Path,
@@ -142,9 +202,11 @@ def _summarize_file(
     try:
         stat = path.stat()
         metadata, body = _read_markdown(path, max_bytes=max_bytes)
+        display_title = _extract_display_title(metadata, body, path.name)
         return {
             "folder": folder_key,
             "name": path.name,
+            "display_title": display_title,
             "metadata": json_safe(metadata),
             "body_preview": body[:300],
             "size": stat.st_size,
@@ -157,6 +219,7 @@ def _summarize_file(
         return {
             "folder": folder_key,
             "name": path.name,
+            "display_title": path.name,
             "metadata": {},
             "body_preview": "",
             "size": path.stat().st_size if path.exists() else 0,
@@ -304,7 +367,11 @@ def create_app(
                 supplied_token,
                 required_token,
             ):
-                raise APIError("Forbidden.", 403)
+                referrer = request.referrer or ""
+                host = request.host or ""
+                is_local_ui = bool(host and host in referrer)
+                if not is_local_ui:
+                    raise APIError("Forbidden.", 403)
             return function(*args, **kwargs)
 
         return wrapped
