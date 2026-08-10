@@ -19,12 +19,14 @@ class GmailRenderingTests(unittest.TestCase):
     def test_bulk_headers_are_preserved_for_generic_routing(self) -> None:
         message = {
             "id": "abc123",
+            "threadId": "thread_xyz789",
             "internalDate": "0",
             "payload": {
                 "mimeType": "text/plain",
                 "headers": [
                     {"name": "From", "value": "Offers <mail@brand.example>"},
                     {"name": "Subject", "value": "Sponsored weekly offer"},
+                    {"name": "Message-ID", "value": "<msg123@brand.example>"},
                     {
                         "name": "List-Unsubscribe",
                         "value": "<https://brand.example/unsubscribe>",
@@ -38,6 +40,8 @@ class GmailRenderingTests(unittest.TestCase):
 
         rendered = gmail_watcher.render_markdown(message)
 
+        self.assertIn('thread_id: "thread_xyz789"', rendered)
+        self.assertIn('message_id_header: "<msg123@brand.example>"', rendered)
         self.assertIn("list_unsubscribe:", rendered)
         self.assertIn("brand.example/unsubscribe", rendered)
         self.assertIn('precedence: "bulk"', rendered)

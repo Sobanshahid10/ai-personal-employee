@@ -79,6 +79,8 @@ class EmailSender(Protocol):
         subject: str,
         draft_body: str,
         html_body: str | None = None,
+        thread_id: str | None = None,
+        message_id_header: str | None = None,
     ) -> dict[str, Any]:
         """Send the exact approved draft and return provider metadata."""
 
@@ -290,22 +292,30 @@ class GmailDirectSender:
         subject: str,
         draft_body: str,
         html_body: str | None = None,
+        thread_id: str | None = None,
+        message_id_header: str | None = None,
     ) -> dict[str, Any]:
         service, from_address = self._connect()
         message = EmailMessage()
         message["To"] = recipient
         message["From"] = from_address
         message["Subject"] = subject
+        if message_id_header:
+            message["In-Reply-To"] = message_id_header
+            message["References"] = message_id_header
         message.set_content(draft_body)
         
         html_payload = html_body if html_body else render_html_email(draft_body, subject=subject)
         message.add_alternative(html_payload, subtype="html")
 
         raw = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii")
+        send_body: dict[str, Any] = {"raw": raw}
+        if thread_id:
+            send_body["threadId"] = thread_id
         response = (
             service.users()
             .messages()
-            .send(userId=GMAIL_USER_ID, body={"raw": raw})
+            .send(userId=GMAIL_USER_ID, body=send_body)
             .execute(num_retries=GMAIL_RETRIES)
         )
         return {
@@ -408,12 +418,25 @@ def _execute_action(
 ) -> dict[str, Any]:
     action_type = metadata["type"]
     if action_type in EMAIL_TYPES:
-        return gmail_sender.send_exact(
-            recipient=metadata["to"],
-            subject=metadata["subject"],
-            draft_body=metadata["draft_body"],
-            html_body=metadata.get("html_body"),
-        )
+        kwargs: dict[str, Any] = {
+            "recipient": metadata["to"],
+            "subject": metadata["subject"],
+            "draft_body": metadata["draft_body"],
+            "html_body": metadata.get("html_body"),
+        }
+        if metadata.get("thread_id"):
+            kwargs["thread_id"] = metadata["thread_id"]
+        if metadata.get("message_id_header"):
+            kwargs["message_id_header"] = metadata["message_id_header"]
+        try:
+            return gmail_sender.send_exact(**kwargs)
+        except TypeError:
+            return gmail_sender.send_exact(
+                recipient=metadata["to"],
+                subject=metadata["subject"],
+                draft_body=metadata["draft_body"],
+                html_body=metadata.get("html_body"),
+            )
     if action_type == "linkedin_post":
         return execute_linkedin(path)
     return {

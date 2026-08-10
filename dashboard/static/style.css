@@ -1748,3 +1748,46 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   color: #6366f1;
   font-weight: 600;
 }
+
+/* SHA-256 Verified Badge & Split-Pane Comparison */
+.badge-sha256 {
+  background: rgba(0, 230, 118, 0.15) !important;
+  color: var(--green) !important;
+  border: 1px solid rgba(0, 230, 118, 0.3) !important;
+  font-family: monospace;
+  letter-spacing: 0.5px;
+}
+
+.split-pane-comparison {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 900px) {
+  .split-pane-comparison {
+    grid-template-columns: 1fr;
+  }
+}
+
+.split-pane-box {
+  background: var(--panel-strong);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.split-pane-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--cyan);
+  margin: 0 0 12px 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}

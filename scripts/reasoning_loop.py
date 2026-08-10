@@ -705,20 +705,23 @@ def _create_approval(
         html_body = render_html_email(draft_body, subject=reply_subj)
         # draft_sha256 lets the future executor prove the approved text did not
         # change between approval and execution.
-        metadata.update(
-            {
-                "to": recipient,
-                "subject": reply_subj,
-                "draft_body": LiteralString(draft_body),
-                "draft_sha256": hashlib.sha256(
-                    draft_body.encode("utf-8")
-                ).hexdigest(),
-                "html_body": LiteralString(html_body),
-                "html_sha256": hashlib.sha256(
-                    html_body.encode("utf-8")
-                ).hexdigest(),
-            }
-        )
+        email_meta: dict[str, Any] = {
+            "to": recipient,
+            "subject": reply_subj,
+            "draft_body": LiteralString(draft_body),
+            "draft_sha256": hashlib.sha256(
+                draft_body.encode("utf-8")
+            ).hexdigest(),
+            "html_body": LiteralString(html_body),
+            "html_sha256": hashlib.sha256(
+                html_body.encode("utf-8")
+            ).hexdigest(),
+        }
+        if item.metadata.get("thread_id"):
+            email_meta["thread_id"] = str(item.metadata["thread_id"])
+        if item.metadata.get("message_id_header"):
+            email_meta["message_id_header"] = str(item.metadata["message_id_header"])
+        metadata.update(email_meta)
     elif decision.action_type == "linkedin_post":
         post_body = draft_body if draft_body else draft_linkedin_post(None, item)
         metadata.update(
@@ -827,7 +830,7 @@ def process_item(client: Groq | None, item: SourceItem) -> tuple[Path | None, Pa
     created_at = utc_now()
 
     requires_approval = final.requires_approval
-    if requires_approval and decision.action_type == "email_send" and is_automated_or_noreply_sender(item.sender):
+    if requires_approval and decision.action_type == "email_send" and is_automated_or_noreply_sender(item.sender, item.metadata):
         LOGGER.warning("Overriding email_send decision for automated/noreply sender %s; auto-handling instead.", item.sender)
         requires_approval = False
 

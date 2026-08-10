@@ -202,7 +202,17 @@ AUTOMATED_NOREPLY_PATTERNS = (
 )
 
 
-def is_automated_or_noreply_sender(sender: str) -> bool:
+def is_automated_or_noreply_sender(sender: str, metadata: Mapping[str, Any] | None = None) -> bool:
+    if metadata:
+        list_unsub = str(metadata.get("list_unsubscribe", "")).strip()
+        precedence = str(metadata.get("precedence", "")).strip().lower()
+        auto_sub = str(
+            metadata.get("auto_submitted", "")
+            or metadata.get("auto-submitted", "")
+        ).strip().lower()
+        list_id = str(metadata.get("list_id", "")).strip()
+        if list_unsub or list_id or precedence in {"bulk", "junk", "list"} or (auto_sub and auto_sub != "no"):
+            return True
     email = _sender_email(sender)
     if not email:
         return True

@@ -179,10 +179,12 @@ def _yaml_string(value: str) -> str:
 def render_markdown(message: dict[str, Any]) -> str:
     """Render a Gmail API message as ChiefMind markdown with YAML frontmatter."""
     message_id = str(message["id"])
+    thread_id = str(message.get("threadId", ""))
     payload = message.get("payload", {})
     headers = _headers(payload)
     sender = headers.get("from", "(unknown sender)")
     subject = headers.get("subject", "(no subject)")
+    message_id_header = headers.get("message-id", "")
     received_at = _received_at(message, headers)
     body = extract_message_body(payload)
     list_unsubscribe = headers.get("list-unsubscribe", "")
@@ -193,6 +195,8 @@ def render_markdown(message: dict[str, Any]) -> str:
     return (
         "---\n"
         f"id: {_yaml_string(message_id)}\n"
+        f"thread_id: {_yaml_string(thread_id)}\n"
+        f"message_id_header: {_yaml_string(message_id_header)}\n"
         f"action_id: {_yaml_string(f'email_{message_id}')}\n"
         "type: email\n"
         f"from: {_yaml_string(sender)}\n"

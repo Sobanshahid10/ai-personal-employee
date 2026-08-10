@@ -24,19 +24,24 @@ class FakeEmailSender:
         subject: str,
         draft_body: str,
         html_body: str | None = None,
+        thread_id: str | None = None,
+        message_id_header: str | None = None,
     ) -> dict[str, str]:
-        self.calls.append(
-            {
-                "recipient": recipient,
-                "subject": subject,
-                "draft_body": draft_body,
-                "html_body": html_body,
-            }
-        )
+        call_info = {
+            "recipient": recipient,
+            "subject": subject,
+            "draft_body": draft_body,
+            "html_body": html_body,
+        }
+        if thread_id:
+            call_info["thread_id"] = thread_id
+        if message_id_header:
+            call_info["message_id_header"] = message_id_header
+        self.calls.append(call_info)
         return {
             "provider": "fake_gmail",
             "message_id": "fake-message-123",
-            "thread_id": "fake-thread-123",
+            "thread_id": thread_id or "fake-thread-123",
         }
 
 

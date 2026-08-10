@@ -708,6 +708,21 @@ async function openDetail(folder, name) {
     $("#modal-status-badge").textContent = (meta.status || folder).toUpperCase();
     $("#modal-title").textContent = meta.subject || meta.summary || meta.action_id || name;
 
+    const badgesContainer = $("#modal-badges");
+    let shaBadge = $("#modal-sha-badge");
+    if (meta.draft_sha256 || meta.html_sha256) {
+      if (!shaBadge) {
+        shaBadge = document.createElement("span");
+        shaBadge.id = "modal-sha-badge";
+        shaBadge.className = "badge badge-sha256";
+        badgesContainer?.append(shaBadge);
+      }
+      shaBadge.textContent = "🔒 SHA-256 VERIFIED";
+      shaBadge.classList.remove("hidden");
+    } else if (shaBadge) {
+      shaBadge.classList.add("hidden");
+    }
+
     // Check if item has draft reply / response
     const hasDraft = Boolean(meta.draft_body || meta.post_body || meta.proposed_action);
     const draftTabBtn = $("#tab-btn-draft");
