@@ -15,6 +15,34 @@ if str(SCRIPTS_DIR) not in sys.path:
 import gmail_watcher  # noqa: E402
 
 
+class GmailRenderingTests(unittest.TestCase):
+    def test_bulk_headers_are_preserved_for_generic_routing(self) -> None:
+        message = {
+            "id": "abc123",
+            "internalDate": "0",
+            "payload": {
+                "mimeType": "text/plain",
+                "headers": [
+                    {"name": "From", "value": "Offers <mail@brand.example>"},
+                    {"name": "Subject", "value": "Sponsored weekly offer"},
+                    {
+                        "name": "List-Unsubscribe",
+                        "value": "<https://brand.example/unsubscribe>",
+                    },
+                    {"name": "List-ID", "value": "offers.brand.example"},
+                    {"name": "Precedence", "value": "bulk"},
+                ],
+                "body": {},
+            },
+        }
+
+        rendered = gmail_watcher.render_markdown(message)
+
+        self.assertIn("list_unsubscribe:", rendered)
+        self.assertIn("brand.example/unsubscribe", rendered)
+        self.assertIn('precedence: "bulk"', rendered)
+
+
 class GmailWatcherShutdownTests(unittest.TestCase):
     def test_poll_stops_between_messages_and_defers_reasoning(self) -> None:
         stop_event = threading.Event()

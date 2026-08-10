@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.utils import parseaddr
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 import yaml
 
@@ -51,6 +51,76 @@ VALID_AUTONOMY_MODES = frozenset(
         "ASK_USER",
         "ESCALATE",
     }
+)
+
+# A provider-independent fast path keeps clear bulk mail and routine automated
+# notifications out of the human queues even when the LLM is unavailable or a
+# large inbox exceeds its runtime budget. Risky or person-to-person subjects are
+# excluded below and continue through the normal classifier and approval policy.
+ROUTINE_NOTIFICATION_TERMS = (
+    "notification",
+    "notified",
+    "digest",
+    "daily update",
+    "weekly update",
+    "activity update",
+    "viewed your profile",
+    "appeared in searches",
+    "people you may know",
+    "recommended for you",
+    "new job",
+    "job alert",
+    "run succeeded",
+    "workflow succeeded",
+    "newsletter",
+    "sponsored",
+    "promotional",
+    "advertisement",
+    "special offer",
+    "limited time offer",
+    "discount",
+    "coupon",
+    "shop now",
+    "sale ends",
+)
+EXPLICIT_SPONSORED_TERMS = (
+    "sponsored",
+    "advertisement",
+    "paid promotion",
+    "promotional email",
+)
+PERSON_TO_PERSON_TERMS = (
+    "sent you a message",
+    "new message",
+    "inmail",
+    "invited you",
+    "invitation",
+    "connection request",
+    "replied to you",
+    "mentioned you",
+)
+SENSITIVE_NOTIFICATION_TERMS = (
+    "action required",
+    "account locked",
+    "account suspended",
+    "authentication",
+    "billing",
+    "dependabot alert",
+    "failed",
+    "invoice",
+    "legal",
+    "login",
+    "password",
+    "payment",
+    "secret exposed",
+    "security",
+    "sign-in",
+    "suspicious",
+    "two-factor",
+    "2fa",
+    "unauthorized",
+    "verify your",
+    "vulnerability",
 )
 
 HARD_ESCALATE_CLASSIFICATIONS = frozenset(
@@ -303,6 +373,86 @@ def _matches_muted_sender(sender: str, policy: OperatorPolicy) -> bool:
     return False
 
 
+def assess_routine_notification(
+    *,
+    policy: OperatorPolicy,
+    sender: str,
+    subject: str,
+    body: str,
+    metadata: Mapping[str, Any] | None = None,
+) -> EventAssessment | None:
+    """Recognize safe machine notifications without an LLM call.
+
+    This is intentionally narrow: configured protected senders and anything
+    suggesting security, money, access trouble, failure, or required action
+    stay on the full reasoning path.
+    """
+    email = _sender_email(sender)
+    if (
+        not email
+        or email in policy.vip_senders
+        or email in policy.always_approval_senders
+    ):
+        return None
+
+    domain = _sender_domain(email)
+    muted_sender = _matches_muted_sender(sender, policy)
+    normalized_subject = " ".join(subject.lower().split())
+    early_content = " ".join(f"{subject}\n{body[:800]}".lower().split())
+
+    if any(term in early_content for term in SENSITIVE_NOTIFICATION_TERMS):
+        return None
+    if any(topic in normalized_subject for topic in policy.approval_topics):
+        return None
+    if any(term in normalized_subject for term in PERSON_TO_PERSON_TERMS):
+        return None
+
+    has_routine_signal = any(
+        term in normalized_subject for term in ROUTINE_NOTIFICATION_TERMS
+    )
+    is_explicitly_sponsored = any(
+        term in normalized_subject for term in EXPLICIT_SPONSORED_TERMS
+    )
+    message_metadata = metadata or {}
+    precedence = str(message_metadata.get("precedence", "")).strip().lower()
+    auto_submitted = str(
+        message_metadata.get("auto_submitted", "")
+    ).strip().lower()
+    has_bulk_header = bool(
+        str(message_metadata.get("list_unsubscribe", "")).strip()
+        or str(message_metadata.get("list_id", "")).strip()
+        or precedence in {"bulk", "list", "junk"}
+        or (auto_submitted and auto_submitted != "no")
+    )
+    has_unsubscribe_footer = "unsubscribe" in body.lower()
+
+    # This rule is based on email semantics, not a list of websites. Explicitly
+    # sponsored subjects are sufficient; otherwise a bulk marker or unsubscribe
+    # footer is paired with routine language unless the sender is already muted.
+    if not (
+        is_explicitly_sponsored
+        or ((has_bulk_header or has_unsubscribe_footer) and has_routine_signal)
+        or (muted_sender and has_routine_signal)
+    ):
+        return None
+
+    display_name, _ = parseaddr(sender)
+    source_label = display_name.strip() or domain or "automated sender"
+    clean_subject = subject.strip() or "(no subject)"
+    return EventAssessment(
+        action_required=False,
+        classifications=("INFORMATION_ONLY", "ROUTINE_ACTION"),
+        reply_intent="none",
+        confidence="high",
+        importance="low",
+        risk="low",
+        reversibility="REVERSIBLE",
+        recommended_autonomy_mode="AUTO_EXECUTE_AND_SUMMARIZE",
+        summary=f"Routine bulk email from {source_label}: {clean_subject}",
+        steps=(),
+    )
+
+
 def _body_matches_approval_topics(text: str, policy: OperatorPolicy) -> bool:
     lowered = text.lower()
     return any(topic in lowered for topic in policy.approval_topics)
@@ -397,13 +547,6 @@ def resolve_autonomy_mode(
             reason=f"Risk level is {assessment.risk}.",
         )
 
-    if _body_matches_approval_topics(combined_text, policy):
-        return finish(
-            "ASK_USER",
-            rule_id="routing.approval_topics",
-            reason="Content matches configured approval topics.",
-        )
-
     if not assessment.action_required:
         mode = (
             "HOLD_AND_SUMMARIZE"
@@ -415,6 +558,13 @@ def resolve_autonomy_mode(
             rule_id="action.not_required",
             reason="No action required; summarize without interrupting.",
             requires_approval=False,
+        )
+
+    if _body_matches_approval_topics(combined_text, policy):
+        return finish(
+            "ASK_USER",
+            rule_id="routing.approval_topics",
+            reason="Actionable content matches configured approval topics.",
         )
 
     if (

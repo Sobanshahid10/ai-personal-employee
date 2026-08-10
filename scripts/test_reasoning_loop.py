@@ -239,6 +239,39 @@ information do you need from me?
         decision_files = list(self.directories["DECISIONS_DIR"].glob("*.jsonl"))
         self.assertTrue(decision_files)
 
+    def test_routine_platform_mail_needs_no_llm_client(self) -> None:
+        source = self.directories["NEEDS_ACTION_DIR"] / "email_github.md"
+        source.write_text(
+            """---
+id: github
+action_id: email_github
+type: email
+from: "GitHub <notifications@github.com>"
+subject: "You have been notified about activity in example/repo"
+received_at: "2026-08-10T10:00:00Z"
+priority: medium
+status: needs_action
+---
+
+There is new activity in a watched repository. Unsubscribe.
+""",
+            encoding="utf-8",
+        )
+
+        completed = reasoning_loop.run_once(client=None)
+
+        self.assertEqual(completed, 1)
+        self.assertFalse(source.exists())
+        done = self.directories["DONE_DIR"] / source.name
+        self.assertTrue(done.is_file())
+        metadata, _ = read_frontmatter(done)
+        self.assertEqual(metadata["resolution"], "auto_handled")
+        self.assertEqual(metadata["policy_rule_id"], "action.not_required")
+        self.assertEqual(
+            list(self.directories["PENDING_APPROVAL_DIR"].glob("*.md")),
+            [],
+        )
+
     def test_malformed_source_is_quarantined(self) -> None:
         source = self.directories["NEEDS_ACTION_DIR"] / "bad.md"
         source.write_text("not frontmatter", encoding="utf-8")

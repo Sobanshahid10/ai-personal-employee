@@ -185,6 +185,10 @@ def render_markdown(message: dict[str, Any]) -> str:
     subject = headers.get("subject", "(no subject)")
     received_at = _received_at(message, headers)
     body = extract_message_body(payload)
+    list_unsubscribe = headers.get("list-unsubscribe", "")
+    list_id = headers.get("list-id", "")
+    precedence = headers.get("precedence", "")
+    auto_submitted = headers.get("auto-submitted", "")
 
     return (
         "---\n"
@@ -194,6 +198,10 @@ def render_markdown(message: dict[str, Any]) -> str:
         f"from: {_yaml_string(sender)}\n"
         f"subject: {_yaml_string(subject)}\n"
         f"received_at: {_yaml_string(received_at)}\n"
+        f"list_unsubscribe: {_yaml_string(list_unsubscribe)}\n"
+        f"list_id: {_yaml_string(list_id)}\n"
+        f"precedence: {_yaml_string(precedence)}\n"
+        f"auto_submitted: {_yaml_string(auto_submitted)}\n"
         "priority: medium\n"
         "status: needs_action\n"
         "---\n\n"

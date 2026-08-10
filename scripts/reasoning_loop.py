@@ -50,6 +50,7 @@ from autonomy import (
     OperatorPolicy,
     append_decision_record,
     append_digest_entry,
+    assess_routine_notification,
     load_operator_policy,
     parse_event_assessment,
     policy_prompt_excerpt,
@@ -179,8 +180,9 @@ def utc_now() -> datetime:
     return datetime.now(tz=UTC)
 
 
-def isoformat_utc(value: datetime) -> str:
-    return value.astimezone(UTC).isoformat(timespec="seconds").replace(
+def isoformat_utc(value: datetime | None = None) -> str:
+    current = value or utc_now()
+    return current.astimezone(UTC).isoformat(timespec="seconds").replace(
         "+00:00", "Z"
     )
 
@@ -335,11 +337,26 @@ def _parse_json_response(content: str) -> dict[str, Any]:
 
 
 def assess_event(
-    client: Groq,
+    client: Groq | None,
     item: SourceItem,
     policy: OperatorPolicy,
 ) -> EventAssessment:
     """Ask Groq for a constrained autonomy assessment (policy engine decides final mode)."""
+    routine = assess_routine_notification(
+        policy=policy,
+        sender=item.sender,
+        subject=item.subject,
+        body=item.body,
+        metadata=item.metadata,
+    )
+    if routine is not None:
+        LOGGER.info(
+            "Deterministically classified %s as a routine notification.",
+            item.action_id,
+        )
+        return routine
+
+    active_client = client or build_client()
     system_prompt = """You assess inbound work for ChiefMind, an autonomous personal employee.
 Return ONLY a JSON object with exactly these keys:
 - action_required: boolean — false when no response, task, or decision is truly needed
@@ -369,7 +386,7 @@ Rules:
     )
 
     response = _retry(
-        lambda: client.chat.completions.create(
+        lambda: active_client.chat.completions.create(
             model=GROQ_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
@@ -589,7 +606,7 @@ def _quarantine_malformed(path: Path, error: Exception) -> None:
         LOGGER.exception("Could not quarantine malformed source %s", path)
 
 
-def process_item(client: Groq, item: SourceItem) -> tuple[Path | None, Path | None]:
+def process_item(client: Groq | None, item: SourceItem) -> tuple[Path | None, Path | None]:
     """Run autonomy assessment, policy routing, and workflow side effects."""
     policy = load_operator_policy()
     assessment = assess_event(client, item, policy)
@@ -707,7 +724,9 @@ def run_once(client: Groq | None = None, *, limit: int | None = None) -> int:
         return 0
 
     guarded_ids = collect_guarded_action_ids()
-    active_client = client or build_client()
+    # The client is created lazily by assess_event. Routine platform
+    # notifications therefore drain even if Groq is unavailable.
+    active_client = client
     completed = 0
 
     for path in paths:

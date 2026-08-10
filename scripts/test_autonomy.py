@@ -8,6 +8,7 @@ from autonomy import (
     DEFAULT_POLICY,
     EventAssessment,
     OperatorPolicy,
+    assess_routine_notification,
     digest_batch_summary,
     parse_event_assessment,
     resolve_autonomy_mode,
@@ -15,6 +16,61 @@ from autonomy import (
 
 
 class AutonomyPolicyTests(unittest.TestCase):
+    def test_github_notification_is_deterministically_routine(self) -> None:
+        assessment = assess_routine_notification(
+            policy=DEFAULT_POLICY,
+            sender="GitHub <notifications@github.com>",
+            subject="You have been notified about activity in example/repo",
+            body="There is new activity in a watched repository. Unsubscribe.",
+        )
+
+        self.assertIsNotNone(assessment)
+        self.assertFalse(assessment.action_required)
+        self.assertEqual(assessment.reply_intent, "none")
+
+    def test_sensitive_platform_notification_uses_full_reasoning(self) -> None:
+        assessment = assess_routine_notification(
+            policy=DEFAULT_POLICY,
+            sender="GitHub <notifications@github.com>",
+            subject="Action required: suspicious sign-in detected",
+            body="Review your account.",
+        )
+
+        self.assertIsNone(assessment)
+
+    def test_linkedin_direct_message_still_uses_full_reasoning(self) -> None:
+        assessment = assess_routine_notification(
+            policy=DEFAULT_POLICY,
+            sender="LinkedIn <messages-noreply@linkedin.com>",
+            subject="A recruiter sent you a message",
+            body="You have a new InMail.",
+        )
+
+        self.assertIsNone(assessment)
+
+    def test_linkedin_digest_is_deterministically_routine(self) -> None:
+        assessment = assess_routine_notification(
+            policy=DEFAULT_POLICY,
+            sender="LinkedIn <updates@e.linkedin.com>",
+            subject="Your weekly update: people viewed your profile",
+            body="See this week's profile activity.",
+            metadata={"list_unsubscribe": "<https://example.test/unsubscribe>"},
+        )
+
+        self.assertIsNotNone(assessment)
+        self.assertIn("LinkedIn", assessment.summary)
+
+    def test_sponsored_mail_from_unknown_website_is_routine(self) -> None:
+        assessment = assess_routine_notification(
+            policy=DEFAULT_POLICY,
+            sender="Example Store <offers@brand.example>",
+            subject="Sponsored: a limited time offer for you",
+            body="Browse this week's deals.",
+        )
+
+        self.assertIsNotNone(assessment)
+        self.assertIn("Example Store", assessment.summary)
+
     def test_no_action_routes_to_auto_summarize(self) -> None:
         assessment = EventAssessment(
             action_required=False,
