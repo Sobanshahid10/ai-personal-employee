@@ -187,10 +187,9 @@ def _extract_display_title(
     category = metadata.get("category")
     if isinstance(category, str) and category.strip():
         cat_str = category.replace("_", " ").title()
-        action_id = metadata.get("action_id", filename)
-        return f"{cat_str} ({action_id})"
+        return f"{cat_str} Plan"
 
-    return str(metadata.get("action_id") or filename)
+    return "Action Plan"
 
 
 def _summarize_file(

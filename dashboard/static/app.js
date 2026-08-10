@@ -277,7 +277,14 @@ function itemCard(item, withActions = false) {
   typeTag.textContent = itemType.toUpperCase();
 
   const title = document.createElement("h3");
-  title.textContent = item.display_title || item.metadata?.subject || item.metadata?.summary || item.metadata?.draft_subject || item.metadata?.action_id || item.name;
+  const candidateTitle = item.display_title || item.metadata?.subject || item.metadata?.summary || item.metadata?.draft_subject;
+  if (candidateTitle) {
+    title.textContent = candidateTitle;
+  } else if (item.metadata?.category) {
+    title.textContent = `${item.metadata.category.replace(/_/g, " ").toUpperCase()} PLAN`;
+  } else {
+    title.textContent = `${itemType.toUpperCase()} ITEM`;
+  }
 
   titleRow.append(typeTag, title);
 

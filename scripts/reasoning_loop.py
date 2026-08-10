@@ -543,6 +543,8 @@ def _create_plan(
         "id": f"plan_{timestamp}_{_safe_fragment(item.action_id)}",
         "action_id": item.action_id,
         "source_email": item.path.name,
+        "subject": item.subject,
+        "summary": decision.summary,
         "priority": decision.priority,
         "category": decision.category,
         "recommended_action": decision.action_type,
