@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#070b16">
     <title>ChiefMind · Autonomous AI Personal Employee</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -200,6 +201,7 @@
           </div>
           <p class="done-headline" id="done-headline">Loading completed work…</p>
           <div class="done-stats-grid" id="done-stats-grid"></div>
+          <div id="done-recent-list" class="timeline compact" style="margin-top: 16px;"></div>
         </article>
 
         <article class="glass-panel">
@@ -315,8 +317,21 @@
               <div class="draft-subject-line" id="draft-subject-box">
                 <strong>Subject:</strong> <span id="draft-subject-val">Re: Subject</span>
               </div>
-              <div class="draft-body-box">
-                <pre class="draft-text" id="draft-text-val"></pre>
+              <div class="draft-view-tabs" id="draft-view-tabs">
+                <button class="draft-tab-btn active" data-mode="html" id="btn-mode-html">🎨 Rendered HTML Email</button>
+                <button class="draft-tab-btn" data-mode="react" id="btn-mode-react">⚛️ Interactive React Card</button>
+                <button class="draft-tab-btn" data-mode="plain" id="btn-mode-plain">📝 Plain Text</button>
+              </div>
+              <div class="draft-body-container" id="draft-body-container">
+                <div class="draft-mode-pane" id="draft-pane-html">
+                  <iframe class="email-iframe-preview" id="draft-iframe-preview" title="HTML Email Preview"></iframe>
+                </div>
+                <div class="draft-mode-pane hidden" id="draft-pane-react">
+                  <div class="react-card-preview" id="draft-react-card"></div>
+                </div>
+                <div class="draft-mode-pane hidden" id="draft-pane-plain">
+                  <pre class="draft-text" id="draft-text-val"></pre>
+                </div>
               </div>
             </div>
           </div>

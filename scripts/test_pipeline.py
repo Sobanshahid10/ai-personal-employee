@@ -40,14 +40,17 @@ class FakeEmailSender:
         recipient: str,
         subject: str,
         draft_body: str,
+        html_body: str | None = None,
+        **kwargs: Any,
     ) -> dict[str, str]:
-        self.calls.append(
-            {
-                "recipient": recipient,
-                "subject": subject,
-                "draft_body": draft_body,
-            }
-        )
+        call_item = {
+            "recipient": recipient,
+            "subject": subject,
+            "draft_body": draft_body,
+        }
+        if html_body is not None:
+            call_item["html_body"] = html_body
+        self.calls.append(call_item)
         return {
             "provider": "fake_gmail",
             "message_id": "test-message-id",

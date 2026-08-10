@@ -239,30 +239,39 @@ function getItemType(item) {
 function renderKpis(stats) {
   const counts = stats.counts || {};
   const cards = [
-    ["Pending Approval", counts.pending_approval || 0, "Human decision required", "var(--purple)", "✓"],
-    ["Auto-Handled Today", stats.digest_today || 0, "Summarized without approval", "var(--green)", "◆"],
-    ["Needs Action", counts.needs_action || 0, "Unprocessed intake only", "var(--cyan)", "◇"],
-    ["Done", counts.done || 0, "Successfully completed", "var(--green)", "●"],
-    ["Failed", counts.failed || 0, "Requires investigation", "var(--red)", "!"],
-    ["Action Plans", counts.plans || 0, "Generated execution plans", "var(--amber)", "≡"],
-    ["Total Items", stats.total_items || 0, "Across all workflows", "#38bdf8", "∑"],
+    ["Pending Approval", counts.pending_approval || 0, "Human decision required", "var(--purple)", "✓", "pending_approval"],
+    ["Auto-Handled Today", stats.digest_today || 0, "Summarized without approval", "var(--green)", "◆", "done"],
+    ["Needs Action", counts.needs_action || 0, "Unprocessed intake only", "var(--cyan)", "◇", "needs_action"],
+    ["Done", counts.done || 0, "Successfully completed", "var(--green)", "●", "done"],
+    ["Failed", counts.failed || 0, "Requires investigation", "var(--red)", "!", "failed"],
+    ["Action Plans", counts.plans || 0, "Generated execution plans", "var(--amber)", "≡", "plans"],
+    ["Total Items", stats.total_items || 0, "Across all workflows", "#38bdf8", "∑", "done"],
   ];
   
   const grid = $("#kpi-grid");
-  grid.replaceChildren(...cards.map(([label, value, note, color, icon]) => {
-    const card = document.createElement("article");
-    card.className = "kpi-card";
-    card.style.setProperty("--accent", color);
-    card.innerHTML = `
-      <div class="kpi-top">
-        <span>${escapeHtml(label)}</span>
-        <i class="kpi-icon">${icon}</i>
-      </div>
-      <div class="kpi-value">${value}</div>
-      <div class="kpi-note">${escapeHtml(note)}</div>
-    `;
-    return card;
-  }));
+  if (grid) {
+    grid.replaceChildren(...cards.map(([label, value, note, color, icon, targetView]) => {
+      const card = document.createElement("article");
+      card.className = "kpi-card clickable";
+      card.setAttribute("role", "button");
+      card.tabIndex = 0;
+      card.style.setProperty("--accent", color);
+      card.style.cursor = "pointer";
+      card.title = `Click to view ${label}`;
+      card.innerHTML = `
+        <div class="kpi-top">
+          <span>${escapeHtml(label)}</span>
+          <i class="kpi-icon">${icon}</i>
+        </div>
+        <div class="kpi-value">${value}</div>
+        <div class="kpi-note">${escapeHtml(note)}</div>
+      `;
+      const trigger = () => switchView(targetView);
+      card.addEventListener("click", trigger);
+      card.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") trigger(); });
+      return card;
+    }));
+  }
 
   $$('[data-count]').forEach(node => {
     node.textContent = counts[node.dataset.count] || 0;
@@ -307,7 +316,8 @@ function itemCard(item, withActions = false) {
   } else if (item.metadata?.category) {
     senderText = `Category: ${item.metadata.category.replace(/_/g, " ")} · `;
   }
-  detail.textContent = `${senderText}${formatDate(item.modified_at)}`;
+  const itemDate = item.metadata?.received_at || item.metadata?.created_at || item.metadata?.date || item.display_date || item.modified_at;
+  detail.textContent = `${senderText}${formatDate(itemDate)}`;
 
   main.append(titleRow, detail);
 
@@ -378,23 +388,86 @@ function renderItems(container, items, withActions = false) {
 
 function timelineEvent(entry) {
   const node = document.createElement("article");
-  node.className = "timeline-event";
+  const statusKey = String(entry.status || entry.event || "info").toLowerCase();
+  node.className = `timeline-event status-${statusKey}`;
 
-  const title = document.createElement("h3");
-  title.textContent = String(entry.status || entry.event || "Activity").replaceAll("_", " ");
+  const headerRow = document.createElement("div");
+  headerRow.className = "event-header-row";
 
-  const detail = document.createElement("p");
-  detail.textContent = [entry.agent, entry.action_id, entry.source_file].filter(Boolean).join(" · ") || "Workflow event";
+  let icon = "⚙️";
+  let label = statusKey.replace(/_/g, " ").toUpperCase();
+  let badgeClass = "badge-info";
+
+  if (statusKey === "staged") {
+    icon = "📥"; label = "INGESTED (GMAIL)"; badgeClass = "badge-cyan";
+  } else if (statusKey === "assessed" || entry.agent === "reasoning") {
+    icon = "🧠"; label = "REASONED (GROQ AI)"; badgeClass = "badge-purple";
+  } else if (statusKey === "approved") {
+    icon = "✓"; label = "HUMAN APPROVED"; badgeClass = "badge-green";
+  } else if (statusKey === "rejected") {
+    icon = "✗"; label = "HUMAN REJECTED"; badgeClass = "badge-red";
+  } else if (statusKey === "executed") {
+    icon = "🚀"; label = "EXECUTED & DELIVERED"; badgeClass = "badge-green";
+  } else if (statusKey === "execution_started") {
+    icon = "⚡"; label = "EXECUTION STARTED"; badgeClass = "badge-amber";
+  } else if (statusKey === "failed") {
+    icon = "⚠️"; label = "FAILED / QUARANTINED"; badgeClass = "badge-red";
+  }
+
+  const badge = document.createElement("span");
+  badge.className = `event-badge ${badgeClass}`;
+  badge.innerHTML = `<i>${icon}</i> ${label}`;
 
   const time = document.createElement("time");
+  time.className = "event-time";
   time.textContent = formatDate(entry.timestamp);
 
-  node.append(title, detail, time);
+  headerRow.append(badge, time);
+
+  const title = document.createElement("h3");
+  title.className = "event-title";
+  title.textContent = entry.subject || entry.summary || entry.display_title || entry.action_id || "Workflow Event";
+
+  const detail = document.createElement("p");
+  detail.className = "event-detail";
+  const metaParts = [];
+  if (entry.from) metaParts.push(`From: ${entry.from}`);
+  if (entry.agent) metaParts.push(`Agent: ${entry.agent}`);
+  if (entry.action_id) metaParts.push(`ID: ${entry.action_id}`);
+  if (entry.autonomy_mode) metaParts.push(`Mode: ${entry.autonomy_mode.replace(/_/g, " ")}`);
+  detail.textContent = metaParts.join(" · ");
+
+  node.append(headerRow, title, detail);
+
+  let narrativeText = entry.details || entry.why_it_matters || entry.reason || "";
+  if (typeof narrativeText === "object") narrativeText = JSON.stringify(narrativeText);
+
+  if (narrativeText) {
+    const narrative = document.createElement("div");
+    narrative.className = "event-narrative";
+    narrative.textContent = narrativeText;
+    node.append(narrative);
+  }
+
   return node;
 }
 
 function renderTimeline(container, entries) {
-  const sorted = [...entries].sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+  let filtered = [...entries];
+  if (state.searchQuery.trim()) {
+    const q = state.searchQuery.toLowerCase();
+    filtered = filtered.filter(entry => {
+      const subj = (entry.subject || "").toLowerCase();
+      const from = (entry.from || "").toLowerCase();
+      const act = (entry.action_id || "").toLowerCase();
+      const status = (entry.status || "").toLowerCase();
+      const agent = (entry.agent || "").toLowerCase();
+      const details = typeof entry.details === "string" ? entry.details.toLowerCase() : "";
+      return subj.includes(q) || from.includes(q) || act.includes(q) || status.includes(q) || agent.includes(q) || details.includes(q);
+    });
+  }
+
+  const sorted = filtered.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
   container.replaceChildren(...(sorted.length ? sorted.map(timelineEvent) : [emptyState("No activity yet", "Agent events will appear here.")]));
 }
 
@@ -514,15 +587,21 @@ async function switchView(view, updateHash = true) {
   if (updateHash && window.location.hash !== `#${targetView}`) {
     window.location.hash = targetView;
   }
-  $("#view-title").textContent = viewLabels[targetView] || targetView;
+  const titleEl = $("#view-title");
+  if (titleEl) titleEl.textContent = viewLabels[targetView] || targetView;
   const descEl = $("#view-description");
   if (descEl) descEl.textContent = viewDescriptions[targetView] || "";
+
   $$(".nav-item").forEach(button => button.classList.toggle("active", button.dataset.view === targetView));
   $$(".view").forEach(section => section.classList.remove("active"));
+  
   const targetSection = targetView === "dashboard" ? "#view-dashboard" : targetView === "activity" ? "#view-activity" : "#view-folder";
-  $(targetSection)?.classList.add("active");
+  const sec = $(targetSection);
+  if (sec) sec.classList.add("active");
+  
   $("#sidebar")?.classList.remove("open");
   $("#menu-button")?.setAttribute("aria-expanded", "false");
+  window.scrollTo({ top: 0, behavior: "smooth" });
 
   if (targetView === "dashboard") await loadDashboard();
   else if (targetView === "activity") await loadActivity();
@@ -533,6 +612,87 @@ async function switchView(view, updateHash = true) {
 function switchModalTab(tabName) {
   $$(".tab-btn").forEach(btn => btn.classList.toggle("active", btn.dataset.tab === tabName));
   $$(".tab-pane").forEach(pane => pane.classList.toggle("hidden", pane.id !== `pane-${tabName}`));
+}
+
+function switchDraftMode(mode) {
+  $$(".draft-tab-btn").forEach(btn => btn.classList.toggle("active", btn.dataset.mode === mode));
+  $$(".draft-mode-pane").forEach(pane => pane.classList.toggle("hidden", pane.id !== `draft-pane-${mode}`));
+}
+
+function renderDraftPane(meta, name) {
+  const recipient = meta.to || meta.draft_recipient || meta.from || "Recipient";
+  const subject = meta.subject || meta.draft_subject || "Re: Response Draft";
+  const draftBody = meta.draft_body || meta.post_body || JSON.stringify(meta.proposed_action || {}, null, 2);
+
+  $("#draft-target").textContent = `To: ${recipient}`;
+  $("#draft-subject-val").textContent = subject;
+  $("#draft-text-val").textContent = draftBody;
+
+  // 1. Render HTML Email View
+  const iframe = $("#draft-iframe-preview");
+  if (iframe) {
+    if (meta.html_body) {
+      iframe.srcdoc = meta.html_body;
+    } else {
+      const formattedBody = parseTextToHtml(draftBody);
+      iframe.srcdoc = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:24px;color:#334155;background:#ffffff;line-height:1.6;}.header{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;padding:20px 24px;border-radius:8px;margin-bottom:20px;}.header h2{margin:0;font-size:18px;}.header p{margin:4px 0 0;font-size:12px;opacity:0.85;}.footer{margin-top:28px;padding-top:16px;border-top:1px solid #e2e8f0;color:#64748b;font-size:12px;display:flex;justify-content:space-between;}</style></head><body><div class="header"><h2>${escapeHtml(subject)}</h2><p>ChiefMind AI Personal Employee</p></div><div class="body">${formattedBody}</div><div class="footer"><span>⚡ ChiefMind AI</span><span>Verified & Signed</span></div></body></html>`;
+    }
+  }
+
+  // 2. Render React Component Card
+  const reactCard = $("#draft-react-card");
+  if (reactCard) {
+    reactCard.innerHTML = `
+      <div class="react-preview-wrapper">
+        <div class="react-toolbar">
+          <div class="react-brand">
+            <span class="react-icon">⚛️</span>
+            <strong>&lt;EmailReplyCard /&gt;</strong>
+            <span class="react-badge">React Component</span>
+          </div>
+          <div class="react-controls">
+            <button class="react-ctrl-btn" id="react-viewport-toggle">📱 Mobile / 💻 Desktop</button>
+            <button class="react-ctrl-btn" id="react-theme-toggle">🌙 Dark Mode</button>
+          </div>
+        </div>
+        <div class="react-card-body light-theme desktop-viewport" id="react-card-canvas">
+          <div class="react-email-header">
+            <div class="react-avatar">AI</div>
+            <div class="react-meta">
+              <div class="react-subject">${escapeHtml(subject)}</div>
+              <div class="react-sender">ChiefMind Assistant &lt;chiefmind@ai.internal&gt;</div>
+            </div>
+            <span class="react-status-chip">Approved Draft</span>
+          </div>
+          <div class="react-content-box">
+            ${parseTextToHtml(draftBody)}
+          </div>
+          <div class="react-signature-bar">
+            <div class="sig-left">
+              <span class="sig-icon">⚡</span>
+              <span>ChiefMind Autonomous Worker</span>
+            </div>
+            <div class="sig-right">
+              <span class="sig-pill">SHA-256 Verified</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const canvas = $("#react-card-canvas");
+    $("#react-viewport-toggle")?.addEventListener("click", () => {
+      canvas?.classList.toggle("mobile-viewport");
+      canvas?.classList.toggle("desktop-viewport");
+    });
+    $("#react-theme-toggle")?.addEventListener("click", (e) => {
+      const isDark = canvas?.classList.toggle("dark-theme");
+      canvas?.classList.toggle("light-theme", !isDark);
+      e.target.textContent = isDark ? "☀️ Light Mode" : "🌙 Dark Mode";
+    });
+  }
+
+  switchDraftMode("html");
 }
 
 async function openDetail(folder, name) {
@@ -557,9 +717,7 @@ async function openDetail(folder, name) {
 
     // Populate Draft Pane if available
     if (hasDraft) {
-      $("#draft-target").textContent = meta.draft_recipient ? `Recipient: ${meta.draft_recipient}` : `Action ID: ${meta.action_id || name}`;
-      $("#draft-subject-val").textContent = meta.draft_subject || meta.subject || "Re: Response Draft";
-      $("#draft-text-val").textContent = meta.draft_body || meta.post_body || JSON.stringify(meta.proposed_action || {}, null, 2);
+      renderDraftPane(meta, name);
     }
 
     // Populate Email Reader View vs Standard Reader
@@ -671,6 +829,10 @@ function closeProfileCard() {
 
 function bindEvents() {
   // Navigation
+  $(".brand")?.addEventListener("click", (e) => {
+    e.preventDefault();
+    switchView("dashboard");
+  });
   $$(".nav-item").forEach(button => button.addEventListener("click", () => switchView(button.dataset.view)));
   $$('[data-go]').forEach(button => button.addEventListener("click", () => switchView(button.dataset.go)));
   
@@ -736,6 +898,11 @@ function bindEvents() {
   // Modal Tabs
   $$(".tab-btn").forEach(btn => {
     btn.addEventListener("click", () => switchModalTab(btn.dataset.tab));
+  });
+
+  // Draft Mode Tabs (HTML, React, Plain Text)
+  $$(".draft-tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => switchDraftMode(btn.dataset.mode));
   });
 
   // Modal Action Buttons

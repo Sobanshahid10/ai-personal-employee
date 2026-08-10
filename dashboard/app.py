@@ -202,6 +202,16 @@ def _summarize_file(
         stat = path.stat()
         metadata, body = _read_markdown(path, max_bytes=max_bytes)
         display_title = _extract_display_title(metadata, body, path.name)
+        mtime_iso = datetime.fromtimestamp(
+            stat.st_mtime,
+            tz=UTC,
+        ).isoformat().replace("+00:00", "Z")
+        display_date = (
+            metadata.get("received_at")
+            or metadata.get("created_at")
+            or metadata.get("date")
+            or mtime_iso
+        )
         return {
             "folder": folder_key,
             "name": path.name,
@@ -209,10 +219,8 @@ def _summarize_file(
             "metadata": json_safe(metadata),
             "body_preview": body[:300],
             "size": stat.st_size,
-            "modified_at": datetime.fromtimestamp(
-                stat.st_mtime,
-                tz=UTC,
-            ).isoformat().replace("+00:00", "Z"),
+            "display_date": display_date,
+            "modified_at": mtime_iso,
         }
     except APIError as exc:
         return {
@@ -222,6 +230,7 @@ def _summarize_file(
             "metadata": {},
             "body_preview": "",
             "size": path.stat().st_size if path.exists() else 0,
+            "display_date": None,
             "modified_at": None,
             "parse_error": exc.message,
         }
@@ -238,10 +247,19 @@ def _list_folder_items(
         for path in folder.glob("*.md")
         if path.is_file() and not path.is_symlink()
     ]
-    items.sort(
-        key=lambda item: item.get("modified_at") or "",
-        reverse=True,
-    )
+
+    def _item_sort_key(item: dict[str, Any]) -> str:
+        meta = item.get("metadata") or {}
+        return str(
+            meta.get("received_at")
+            or meta.get("created_at")
+            or meta.get("date")
+            or item.get("display_date")
+            or item.get("modified_at")
+            or ""
+        )
+
+    items.sort(key=_item_sort_key, reverse=True)
     return items
 
 

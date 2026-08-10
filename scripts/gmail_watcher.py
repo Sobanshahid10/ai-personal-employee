@@ -262,10 +262,10 @@ def _mark_as_read(service: Resource, message_id: str) -> None:
         .modify(
             userId=GMAIL_USER_ID,
             id=message_id,
-            body={"removeLabelIds": ["UNREAD"]},
+            body={"removeLabelIds": ["UNREAD", "INBOX"]},
         )
         .execute(),
-        f"Marking Gmail message {message_id} as read",
+        f"Marking Gmail message {message_id} as read and archiving",
     )
 
 
@@ -338,11 +338,48 @@ def poll_once(
             break
         try:
             message = _get_message(service, message_id)
+            payload = message.get("payload", {})
+            hdrs = _headers(payload)
+            sender = hdrs.get("from", "(unknown sender)")
+            subj = hdrs.get("subject", "(no subject)")
+            recv_str = _received_at(message, hdrs)
+
+            # Skip staging ancient unread emails (>14 days old) to avoid backlog clutter
+            try:
+                dt_recv = datetime.fromisoformat(recv_str.replace("Z", "+00:00"))
+                if dt_recv.year >= 2020 and (datetime.now(tz=UTC) - dt_recv).days > 14:
+                    _mark_as_read(service, message_id)
+                    processed_ids.add(message_id)
+                    save_processed_ids(processed_ids)
+                    LOGGER.info("Skipped ancient unread email %s received at %s", message_id, recv_str)
+                    continue
+            except Exception:
+                pass
+
             destination = _write_message_file(message)
             _mark_as_read(service, message_id)
             processed_ids.add(message_id)
             save_processed_ids(processed_ids)
             completed += 1
+
+            try:
+                from config import LOGS_DIR
+                from workflow_utils import append_json_array
+                audit_event = {
+                    "timestamp": datetime.now(tz=UTC).isoformat().replace("+00:00", "Z"),
+                    "agent": "gmail_watcher",
+                    "action_id": f"email_{message_id}",
+                    "source_file": f"email_{message_id}.md",
+                    "status": "staged",
+                    "type": "email",
+                    "from": sender,
+                    "subject": subj,
+                    "details": "Fetched unread email from Gmail Inbox into Needs_Action queue.",
+                }
+                append_json_array(LOGS_DIR / f"{datetime.now(tz=UTC).date().isoformat()}.json", audit_event)
+            except Exception as exc:
+                LOGGER.warning("Could not write staged audit log: %s", exc)
+
             LOGGER.info("Staged Gmail message %s at %s", message_id, destination)
         except Exception:
             LOGGER.exception(

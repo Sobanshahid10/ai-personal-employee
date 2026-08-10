@@ -51,11 +51,13 @@ from autonomy import (
     append_decision_record,
     append_digest_entry,
     assess_routine_notification,
+    is_automated_or_noreply_sender,
     load_operator_policy,
     parse_event_assessment,
     policy_prompt_excerpt,
     resolve_autonomy_mode,
 )
+from html_email import render_html_email
 from knowledge import retrieve_relevant_sections
 
 
@@ -158,13 +160,28 @@ def _category_from_classifications(classifications: tuple[str, ...]) -> str:
     return re.sub(r"[^a-z0-9]+", "_", primary).strip("_") or "general"
 
 
-def _decision_from_assessment(assessment: EventAssessment) -> Decision:
-    action_type = (
-        "email_send"
-        if assessment.reply_intent == "required"
+def _decision_from_assessment(
+    assessment: EventAssessment,
+    item: SourceItem | None = None,
+) -> Decision:
+    text_check = ""
+    if item:
+        text_check = f"{item.subject} {item.body} {assessment.summary}".lower()
+    else:
+        text_check = assessment.summary.lower()
+
+    is_linkedin = bool(re.search(r"\blinkedin\b", text_check))
+
+    if is_linkedin:
+        action_type = "linkedin_post"
+    elif (
+        assessment.reply_intent == "required"
         or "EXTERNAL_COMMUNICATION" in assessment.classifications
-        else "manual"
-    )
+    ):
+        action_type = "email_send"
+    else:
+        action_type = "manual"
+
     return Decision(
         action_type=action_type,
         priority=_priority_from_importance(assessment.importance),
@@ -295,9 +312,9 @@ def _retry(operation: Callable[[], T], description: str) -> T:
         try:
             return operation()
         except retryable as exc:
-            if attempt >= GROQ_RETRIES:
+            if "tokens per day (TPD)" in str(exc) or attempt >= GROQ_RETRIES:
                 raise LLMUnavailableError(
-                    f"{description} failed after {attempt + 1} attempt(s): {exc}"
+                    f"{description} failed: {exc}"
                 ) from exc
             delay = GROQ_RETRY_DELAY * (2**attempt)
             LOGGER.warning(
@@ -375,29 +392,47 @@ Return ONLY a JSON object with exactly these keys:
 
 Rules:
 - Do not treat marketing words like "urgent" as proof of importance.
-- Automated notifications, sponsored emails, marketing offers, newsletters, advertisements, social updates, bulk announcements, event invitations, webinars, and promotional mail MUST have action_required: false and reply_intent: "none" unless explicitly addressed to the user personally by a human contact asking for specific custom work.
-- Automated notifications and logs are INFORMATION_ONLY or ROUTINE_ACTION with action_required false and reply_intent "none".
-- EXTERNAL_COMMUNICATION applies only when a personalized human-visible email reply is strictly needed for direct communication with a real person.
+- Direct instructions or requests from a human contact asking to draft, stage, create, post, publish, or reply (such as creating a LinkedIn post, social update, email reply, or task) MUST have action_required: true, classification USER_ACTION_REQUIRED or EXTERNAL_COMMUNICATION, and reply_intent "required".
+- Automated notifications, third-party marketing offers, newsletters, advertisements, social digests, bulk announcements, event invitations, webinars, and promotional mail MUST have action_required: false and reply_intent: "none".
+- EXTERNAL_COMMUNICATION applies when an email reply or social media post draft is required for approval.
 - Never claim an action was executed."""
+    body_text = item.body or "(empty body)"
+    if len(body_text) > 3000:
+        body_text = body_text[:3000] + "\n...[content truncated for assessment]..."
     user_prompt = (
         f"Operator policy excerpt:\n{policy_prompt_excerpt(policy)}\n\n"
         f"Source metadata:\n{json.dumps(item.metadata, ensure_ascii=False, default=str)}"
-        f"\n\nSource body:\n{item.body or '(empty body)'}"
+        f"\n\nSource body:\n{body_text}"
     )
 
-    response = _retry(
-        lambda: active_client.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=CLASSIFICATION_TEMPERATURE,
-            max_tokens=REASONING_MAX_TOKENS,
-            response_format={"type": "json_object"},
-        ),
-        "Groq event assessment",
-    )
+    models_to_try = [GROQ_MODEL]
+    if "llama-3.1-8b-instant" not in models_to_try:
+        models_to_try.append("llama-3.1-8b-instant")
+
+    response = None
+    last_err = None
+    for model_name in models_to_try:
+        try:
+            response = _retry(
+                lambda m=model_name: active_client.chat.completions.create(
+                    model=m,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    temperature=CLASSIFICATION_TEMPERATURE,
+                    max_tokens=REASONING_MAX_TOKENS,
+                    response_format={"type": "json_object"},
+                ),
+                f"Groq event assessment ({model_name})",
+            )
+            break
+        except LLMUnavailableError as exc:
+            last_err = exc
+            LOGGER.warning("Assessment with model %s failed: %s; attempting fallback", model_name, exc)
+
+    if response is None:
+        raise last_err or LLMUnavailableError("All LLM models failed assessment.")
     data = _parse_json_response(_response_text(response))
     try:
         return parse_event_assessment(data)
@@ -443,23 +478,86 @@ Retrieved knowledge
 {knowledge_context or "(No matching knowledge section. Ask for clarification or avoid unsupported claims.)"}
 
 Write the exact ready-to-send reply body."""
+    models_to_try = [GROQ_MODEL]
+    if "llama-3.1-8b-instant" not in models_to_try:
+        models_to_try.append("llama-3.1-8b-instant")
 
-    response = _retry(
-        lambda: client.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=EMAIL_DRAFT_TEMPERATURE,
-            max_tokens=REASONING_MAX_TOKENS,
-        ),
-        "Groq email drafting",
+    for model_name in models_to_try:
+        try:
+            response = _retry(
+                lambda m=model_name: client.chat.completions.create(
+                    model=m,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    temperature=EMAIL_DRAFT_TEMPERATURE,
+                    max_tokens=REASONING_MAX_TOKENS,
+                ),
+                f"Groq email drafting ({model_name})",
+            )
+            draft = _response_text(response)
+            if draft and not draft.startswith("```"):
+                return draft
+        except LLMUnavailableError as exc:
+            LOGGER.warning("Drafting with model %s failed: %s; trying fallback", model_name, exc)
+
+    sender_name = parseaddr(item.sender)[0] or "there"
+    return (
+        f"Hello {sender_name},\n\n"
+        f"Thank you for reaching out regarding '{item.subject}'. "
+        "I have received your message and staged it for review.\n\n"
+        "Best regards,\nSoban"
     )
-    draft = _response_text(response)
-    if draft.startswith("```") or not draft:
-        raise LLMResponseError("Email draft must be plain, non-empty text.")
-    return draft
+
+
+def draft_linkedin_post(
+    client: Groq | None,
+    item: SourceItem,
+) -> str:
+    """Draft an engaging LinkedIn post body from source request."""
+    if client is None:
+        return (
+            f"🚀 ChiefMind Update: {item.subject}\n\n"
+            f"We are excited to share a key milestone!\n\n"
+            f"{item.body}\n\n"
+            "#ChiefMind #AI #Automation #Productivity"
+        )
+    system_prompt = """You draft engaging, professional LinkedIn posts for ChiefMind.
+Return ONLY the complete post body text with clear paragraph spacing, key feature highlights, and 3-5 relevant hashtags.
+Do NOT include any subject line, commentary, or markdown code fences."""
+    user_prompt = f"Request details:\nSubject: {item.subject}\n\nBody:\n{item.body}"
+
+    models_to_try = [GROQ_MODEL]
+    if "llama-3.1-8b-instant" not in models_to_try:
+        models_to_try.append("llama-3.1-8b-instant")
+
+    for model_name in models_to_try:
+        try:
+            response = _retry(
+                lambda m=model_name: client.chat.completions.create(
+                    model=m,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    temperature=EMAIL_DRAFT_TEMPERATURE,
+                    max_tokens=REASONING_MAX_TOKENS,
+                ),
+                f"Groq LinkedIn drafting ({model_name})",
+            )
+            draft = _response_text(response)
+            if draft and not draft.startswith("```"):
+                return draft
+        except LLMUnavailableError as exc:
+            LOGGER.warning("LinkedIn drafting with model %s failed: %s; trying fallback", model_name, exc)
+
+    return (
+        f"🚀 ChiefMind Update: {item.subject}\n\n"
+        f"We are excited to share a key milestone!\n\n"
+        f"{item.body}\n\n"
+        "#ChiefMind #AI #Automation #Productivity"
+    )
 
 
 def extract_knowledge_references(context: str) -> list[str]:
@@ -563,6 +661,8 @@ def _create_plan(
         "knowledge_references": references,
         "created_at": isoformat_utc(created_at),
     }
+    if item.metadata.get("received_at"):
+        metadata["received_at"] = item.metadata["received_at"]
     path = PLANS_DIR / f"Plan_{_safe_fragment(item.action_id)}.md"
     body = _format_plan_body(item, decision, final, references)
     atomic_write(path, dump_frontmatter(metadata, body))
@@ -586,7 +686,10 @@ def _create_approval(
         "autonomy_mode": final.autonomy_mode,
         "classifications": list(final.classifications),
         "policy_rule_id": final.policy_rule_id,
+        "created_at": isoformat_utc(created_at),
     }
+    if item.metadata.get("received_at"):
+        metadata["received_at"] = item.metadata["received_at"]
     if final.autonomy_mode == "ESCALATE":
         metadata["escalated"] = True
         metadata["escalation_reason"] = final.reason
@@ -598,16 +701,31 @@ def _create_approval(
             raise ReasoningError(
                 f"Cannot create email approval without a valid sender address: {item.sender!r}"
             )
+        reply_subj = _reply_subject(item.subject)
+        html_body = render_html_email(draft_body, subject=reply_subj)
         # draft_sha256 lets the future executor prove the approved text did not
         # change between approval and execution.
         metadata.update(
             {
                 "to": recipient,
-                "subject": _reply_subject(item.subject),
+                "subject": reply_subj,
                 "draft_body": LiteralString(draft_body),
                 "draft_sha256": hashlib.sha256(
                     draft_body.encode("utf-8")
                 ).hexdigest(),
+                "html_body": LiteralString(html_body),
+                "html_sha256": hashlib.sha256(
+                    html_body.encode("utf-8")
+                ).hexdigest(),
+            }
+        )
+    elif decision.action_type == "linkedin_post":
+        post_body = draft_body if draft_body else draft_linkedin_post(None, item)
+        metadata.update(
+            {
+                "post_body": LiteralString(post_body),
+                "summary": decision.summary,
+                "instructions": list(decision.steps),
             }
         )
     else:
@@ -662,6 +780,8 @@ def _archive_duplicate_guard(item: SourceItem) -> Path:
 
 
 def _quarantine_malformed(path: Path, error: Exception) -> None:
+    if not path.is_file():
+        return
     FAILED_DIR.mkdir(parents=True, exist_ok=True)
     destination = FAILED_DIR / path.name
     if destination.exists():
@@ -689,13 +809,16 @@ def process_item(client: Groq | None, item: SourceItem) -> tuple[Path | None, Pa
         subject=item.subject,
         body=item.body,
     )
-    decision = _decision_from_assessment(assessment)
+    decision = _decision_from_assessment(assessment, item)
 
     append_decision_record(
         {
             **final.to_audit_dict(),
             "agent": "reasoning",
             "source_file": item.path.name,
+            "subject": item.subject,
+            "from": item.sender,
+            "details": f"Reasoned: {assessment.summary}",
         }
     )
 
@@ -703,15 +826,23 @@ def process_item(client: Groq | None, item: SourceItem) -> tuple[Path | None, Pa
     draft_body: str | None = None
     created_at = utc_now()
 
-    if final.requires_approval:
+    requires_approval = final.requires_approval
+    if requires_approval and decision.action_type == "email_send" and is_automated_or_noreply_sender(item.sender):
+        LOGGER.warning("Overriding email_send decision for automated/noreply sender %s; auto-handling instead.", item.sender)
+        requires_approval = False
+
+    if requires_approval:
         query = " ".join((item.subject, item.body)).strip() or item.action_id
         knowledge_context = retrieve_relevant_sections(
             query,
             top_k=REASONING_TOP_K,
         )
         references = extract_knowledge_references(knowledge_context)
+        
         if decision.action_type == "email_send":
             draft_body = draft_email(client, item, knowledge_context)
+        elif decision.action_type == "linkedin_post":
+            draft_body = draft_linkedin_post(client, item)
 
         plan_path = _create_plan(
             item,
@@ -728,6 +859,56 @@ def process_item(client: Groq | None, item: SourceItem) -> tuple[Path | None, Pa
             created_at,
             draft_body,
         )
+
+        # Ensure both Email Reply and LinkedIn Post approval artifacts exist when LinkedIn is involved
+        text_check = f"{item.subject} {item.body}".lower()
+        is_linkedin_req = bool(re.search(r"\blinkedin\b", text_check))
+
+        if is_linkedin_req and decision.action_type != "email_send" and item.sender:
+            email_draft = draft_email(client, item, knowledge_context)
+            email_decision = Decision(
+                action_type="email_send",
+                priority=decision.priority,
+                category=decision.category,
+                summary=f"Email Reply: {decision.summary}",
+                steps=decision.steps,
+            )
+            email_item = SourceItem(
+                path=item.path,
+                metadata={**item.metadata, "action_id": f"reply_{item.action_id}"},
+                body=item.body,
+            )
+            _create_approval(
+                email_item,
+                email_decision,
+                final,
+                references,
+                created_at,
+                email_draft,
+            )
+
+        if is_linkedin_req and decision.action_type != "linkedin_post":
+            linkedin_post_body = draft_linkedin_post(client, item)
+            linkedin_decision = Decision(
+                action_type="linkedin_post",
+                priority=decision.priority,
+                category="external_communication",
+                summary=f"LinkedIn Post: {decision.summary}",
+                steps=decision.steps,
+            )
+            linkedin_item = SourceItem(
+                path=item.path,
+                metadata={**item.metadata, "action_id": f"linkedin_{item.action_id}"},
+                body=item.body,
+            )
+            _create_approval(
+                linkedin_item,
+                linkedin_decision,
+                final,
+                references,
+                created_at,
+                linkedin_post_body,
+            )
         done_path = _relocate_source(
             item,
             resolution={

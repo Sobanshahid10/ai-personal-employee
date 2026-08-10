@@ -23,12 +23,14 @@ class FakeEmailSender:
         recipient: str,
         subject: str,
         draft_body: str,
+        html_body: str | None = None,
     ) -> dict[str, str]:
         self.calls.append(
             {
                 "recipient": recipient,
                 "subject": subject,
                 "draft_body": draft_body,
+                "html_body": html_body,
             }
         )
         return {

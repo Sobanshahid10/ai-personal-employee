@@ -172,8 +172,46 @@ BULK_MARKETING_DOMAINS = frozenset(
         "eventbrite.com",
         "luma.com",
         "meetup.com",
+        "hec.gov.pk",
+        "jenpharm.com",
+        "apple.com",
+        "spotify.com",
+        "atlassian.net",
     }
 )
+AUTOMATED_NOREPLY_PATTERNS = (
+    "noreply",
+    "no-reply",
+    "donotreply",
+    "do-not-reply",
+    "no_reply",
+    "do_not_reply",
+    "notifications",
+    "notification",
+    "mailer-daemon",
+    "bounce",
+    "automated",
+    "service",
+    "alerts",
+    "jobalerts",
+    "jobalert",
+    "newsletters",
+    "newsletter",
+    "marketing",
+    "updates",
+)
+
+
+def is_automated_or_noreply_sender(sender: str) -> bool:
+    email = _sender_email(sender)
+    if not email:
+        return True
+    local, _, domain = email.partition("@")
+    if any(p in local.lower() for p in AUTOMATED_NOREPLY_PATTERNS):
+        return True
+    if domain in BULK_MARKETING_DOMAINS or any(domain.endswith(f".{b}") for b in BULK_MARKETING_DOMAINS):
+        return True
+    return False
 INFORMATIONAL_SECURITY_SUBJECTS = (
     "oauth application has been added",
     "third-party oauth application",

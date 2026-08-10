@@ -71,6 +71,26 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   display: none !important;
 }
 
+.view {
+  display: none !important;
+}
+
+.view.active {
+  display: block !important;
+  animation: fadeInView 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes fadeInView {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .view-description {
   margin: 0.25rem 0 0 0;
   font-size: 0.85rem;
@@ -1013,7 +1033,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   font-size: 15px;
 }
 
-/* Timeline */
+/* Timeline & Activity Audit Stream */
 .timeline {
   display: flex;
   flex-direction: column;
@@ -1035,33 +1055,76 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .timeline-event::before {
   content: "";
   position: absolute;
-  top: 3px;
+  top: 4px;
   left: -5px;
-  width: 9px;
-  height: 9px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   background: var(--cyan);
   box-shadow: 0 0 12px var(--cyan);
 }
 
-.timeline-event h3 {
-  margin: 0 0 6px;
-  font-size: 14px;
-  font-weight: 600;
+.timeline-event.status-staged::before { background: var(--cyan); box-shadow: 0 0 12px var(--cyan); }
+.timeline-event.status-assessed::before { background: var(--purple); box-shadow: 0 0 12px var(--purple); }
+.timeline-event.status-approved::before, .timeline-event.status-executed::before { background: var(--green); box-shadow: 0 0 12px var(--green); }
+.timeline-event.status-rejected::before, .timeline-event.status-failed::before { background: var(--red); box-shadow: 0 0 12px var(--red); }
+.timeline-event.status-execution_started::before { background: var(--amber); box-shadow: 0 0 12px var(--amber); }
+
+.event-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
 }
 
-.timeline-event p {
-  margin: 0;
+.event-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.event-badge.badge-cyan { background: rgba(0, 242, 254, 0.14); color: var(--cyan); border: 1px solid rgba(0, 242, 254, 0.3); }
+.event-badge.badge-purple { background: rgba(124, 77, 255, 0.16); color: #a78bfa; border: 1px solid rgba(124, 77, 255, 0.3); }
+.event-badge.badge-green { background: rgba(0, 230, 118, 0.14); color: var(--green); border: 1px solid rgba(0, 230, 118, 0.3); }
+.event-badge.badge-red { background: rgba(255, 82, 82, 0.14); color: var(--red); border: 1px solid rgba(255, 82, 82, 0.3); }
+.event-badge.badge-amber { background: rgba(255, 171, 0, 0.14); color: var(--amber); border: 1px solid rgba(255, 171, 0, 0.3); }
+.event-badge.badge-info { background: rgba(148, 163, 184, 0.12); color: var(--text-muted); border: 1px solid var(--border); }
+
+.event-time {
+  color: var(--text-dim);
+  font-size: 11.5px;
+}
+
+.event-title {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.event-detail {
+  margin: 0 0 8px;
   color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.event-narrative {
+  margin-top: 8px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid var(--border);
+  color: #cbd5e1;
   font-size: 12px;
   line-height: 1.55;
-}
-
-.timeline-event time {
-  display: block;
-  margin-top: 8px;
-  color: var(--text-dim);
-  font-size: 11px;
 }
 
 .digest-batch-header {
@@ -1494,4 +1557,194 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   .item-actions { width: 100%; }
   .action-button { flex: 1; }
   .topbar-actions { gap: 8px; }
+}
+
+/* Draft Reply View Modes: HTML, React, Plain Text */
+.draft-view-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.draft-tab-btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.draft-tab-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-main);
+}
+
+.draft-tab-btn.active {
+  background: linear-gradient(135deg, rgba(79, 70, 229, 0.4), rgba(124, 58, 237, 0.4));
+  border-color: rgba(99, 102, 241, 0.6);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
+}
+
+.draft-body-container {
+  margin-top: 12px;
+  min-height: 380px;
+}
+
+.email-iframe-preview {
+  width: 100%;
+  height: 420px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+/* React Component Card Preview */
+.react-preview-wrapper {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #0f172a;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.react-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 18px;
+  background: rgba(15, 23, 42, 0.95);
+  border-bottom: 1px solid #1e293b;
+}
+
+.react-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #38bdf8;
+}
+
+.react-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #38bdf8;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.react-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.react-ctrl-btn {
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid #334155;
+  background: #1e293b;
+  color: #cbd5e1;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.react-ctrl-btn:hover {
+  background: #334155;
+  color: #ffffff;
+}
+
+.react-card-body {
+  padding: 24px;
+  transition: all 0.25s ease;
+}
+
+.react-card-body.desktop-viewport {
+  max-width: 100%;
+}
+
+.react-card-body.mobile-viewport {
+  max-width: 375px;
+  margin: 0 auto;
+  border-left: 1px solid #334155;
+  border-right: 1px solid #334155;
+}
+
+.react-card-body.light-theme {
+  background: #ffffff;
+  color: #1e293b;
+}
+
+.react-card-body.dark-theme {
+  background: #0f172a;
+  color: #f8fafc;
+}
+
+.react-email-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.react-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.react-meta { flex: 1; }
+.react-subject { font-weight: 700; font-size: 15px; }
+.react-sender { font-size: 12px; opacity: 0.7; }
+
+.react-status-chip {
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.react-content-box {
+  line-height: 1.65;
+  font-size: 14.5px;
+  min-height: 140px;
+}
+
+.react-signature-bar {
+  margin-top: 24px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.sig-pill {
+  padding: 3px 8px;
+  border-radius: 12px;
+  background: rgba(99, 102, 241, 0.15);
+  color: #6366f1;
+  font-weight: 600;
 }

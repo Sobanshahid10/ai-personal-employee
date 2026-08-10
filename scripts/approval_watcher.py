@@ -24,6 +24,7 @@ from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
 from authenticate_gmail import load_gmail_credentials
+from html_email import render_html_email
 from config import (
     APPROVAL_SETTLE_SECONDS,
     APPROVED_DIR,
@@ -77,6 +78,7 @@ class EmailSender(Protocol):
         recipient: str,
         subject: str,
         draft_body: str,
+        html_body: str | None = None,
     ) -> dict[str, Any]:
         """Send the exact approved draft and return provider metadata."""
 
@@ -232,6 +234,22 @@ def validate_approval(path: Path) -> dict[str, Any]:
                 raise ApprovalValidationError(
                     "draft_body integrity check failed; approved text changed."
                 )
+
+        expected_html_hash = metadata.get("html_sha256")
+        if expected_html_hash is not None and "html_body" in metadata:
+            if not isinstance(expected_html_hash, str) or not re_full_sha256(
+                expected_html_hash
+            ):
+                raise ApprovalValidationError(
+                    "`html_sha256` must be a 64-character hexadecimal string."
+                )
+            actual_html_hash = hashlib.sha256(
+                metadata["html_body"].encode("utf-8")
+            ).hexdigest()
+            if not hmac.compare_digest(actual_html_hash, expected_html_hash.lower()):
+                raise ApprovalValidationError(
+                    "html_body integrity check failed; approved text changed."
+                )
     return metadata
 
 
@@ -271,14 +289,18 @@ class GmailDirectSender:
         recipient: str,
         subject: str,
         draft_body: str,
+        html_body: str | None = None,
     ) -> dict[str, Any]:
         service, from_address = self._connect()
         message = EmailMessage()
         message["To"] = recipient
         message["From"] = from_address
         message["Subject"] = subject
-        # No LLM call, templating, trimming, or rewriting occurs here.
         message.set_content(draft_body)
+        
+        html_payload = html_body if html_body else render_html_email(draft_body, subject=subject)
+        message.add_alternative(html_payload, subtype="html")
+
         raw = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii")
         response = (
             service.users()
@@ -390,6 +412,7 @@ def _execute_action(
             recipient=metadata["to"],
             subject=metadata["subject"],
             draft_body=metadata["draft_body"],
+            html_body=metadata.get("html_body"),
         )
     if action_type == "linkedin_post":
         return execute_linkedin(path)
