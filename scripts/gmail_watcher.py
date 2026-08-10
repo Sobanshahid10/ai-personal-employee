@@ -8,7 +8,7 @@ import json
 import subprocess
 import sys
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 from pathlib import Path
@@ -218,9 +218,17 @@ def _write_message_file(message: dict[str, Any]) -> Path:
     return destination
 
 
+def _build_effective_query(base_query: str, max_age_days: int = 14) -> str:
+    """Append a Gmail `after:` date filter so the server excludes old mail."""
+    cutoff = (datetime.now(tz=UTC) - timedelta(days=max_age_days)).strftime("%Y/%m/%d")
+    return f"{base_query} after:{cutoff}"
+
+
 def _list_message_ids(service: Resource) -> list[str]:
     message_ids: list[str] = []
     page_token: str | None = None
+    effective_query = _build_effective_query(GMAIL_QUERY)
+    LOGGER.debug("Gmail query: %s", effective_query)
 
     while len(message_ids) < GMAIL_MAX_RESULTS:
         remaining = min(500, GMAIL_MAX_RESULTS - len(message_ids))
@@ -229,7 +237,7 @@ def _list_message_ids(service: Resource) -> list[str]:
             .messages()
             .list(
                 userId=GMAIL_USER_ID,
-                q=GMAIL_QUERY,
+                q=effective_query,
                 maxResults=remaining,
                 pageToken=page_token,
             )
