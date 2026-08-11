@@ -212,6 +212,26 @@ def _summarize_file(
             or metadata.get("date")
             or mtime_iso
         )
+        if folder_key == "failed" and "error" not in metadata:
+            err_file = path.with_suffix(".error.txt")
+            if err_file.exists():
+                try:
+                    metadata["error"] = err_file.read_text(encoding="utf-8").strip()
+                except OSError:
+                    pass
+            else:
+                action_id = metadata.get("action_id")
+                if action_id:
+                    receipts_file = config.LOGS / "execution_receipts.json"
+                    if receipts_file.exists():
+                        try:
+                            receipts = json.loads(receipts_file.read_text(encoding="utf-8"))
+                            rec = receipts.get(action_id)
+                            if isinstance(rec, dict) and rec.get("error"):
+                                metadata["error"] = str(rec["error"])
+                        except (OSError, json.JSONDecodeError):
+                            pass
+
         return {
             "folder": folder_key,
             "name": path.name,
@@ -452,6 +472,26 @@ def create_app(
             path,
             max_bytes=app.config["MAX_FILE_BYTES"],
         )
+        if folder == "failed" and "error" not in metadata:
+            err_file = path.with_suffix(".error.txt")
+            if err_file.exists():
+                try:
+                    metadata["error"] = err_file.read_text(encoding="utf-8").strip()
+                except OSError:
+                    pass
+            else:
+                action_id = metadata.get("action_id")
+                if action_id:
+                    receipts_file = config.LOGS / "execution_receipts.json"
+                    if receipts_file.exists():
+                        try:
+                            receipts = json.loads(receipts_file.read_text(encoding="utf-8"))
+                            rec = receipts.get(action_id)
+                            if isinstance(rec, dict) and rec.get("error"):
+                                metadata["error"] = str(rec["error"])
+                        except (OSError, json.JSONDecodeError):
+                            pass
+
         return jsonify(
             {
                 "folder": folder,

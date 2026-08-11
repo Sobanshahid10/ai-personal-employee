@@ -156,11 +156,13 @@ def post_to_linkedin_playwright(
     password: str = LINKEDIN_PASSWORD,
     headless: bool = LINKEDIN_HEADLESS,
     storage_state_file: Path = LINKEDIN_STORAGE_STATE_FILE,
+    max_retries: int = 2,
 ) -> bool:
     """Publish through LinkedIn's UI as an explicitly enabled fallback.
 
     LinkedIn can change this UI without notice. Official API mode is preferred.
     Login challenges intentionally fail rather than attempting to bypass them.
+    Retries on transient network errors (ERR_NETWORK_CHANGED etc.).
     """
     if not storage_state_file.is_file() and (not email or not password):
         raise LinkedInPosterError(
@@ -176,58 +178,134 @@ def post_to_linkedin_playwright(
             "Playwright is not installed. Run `uv sync` and install Chromium."
         ) from exc
 
-    try:
-        with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=headless)
-            context_options: dict[str, Any] = {}
-            if storage_state_file.is_file():
-                context_options["storage_state"] = str(storage_state_file)
-            context = browser.new_context(**context_options)
-            page = context.new_page()
-            page.goto("https://www.linkedin.com/feed/", wait_until="domcontentloaded")
+    last_exc: Exception | None = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            with sync_playwright() as playwright:
+                browser = playwright.chromium.launch(
+                    headless=headless,
+                    args=["--disable-blink-features=AutomationControlled"],
+                )
+                context_options: dict[str, Any] = {
+                    "user_agent": (
+                        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/124.0.0.0 Safari/537.36"
+                    ),
+                    "viewport": {"width": 1280, "height": 800},
+                }
+                if storage_state_file.is_file():
+                    context_options["storage_state"] = str(storage_state_file)
+                context = browser.new_context(**context_options)
+                page = context.new_page()
 
-            if "/login" in page.url or page.locator("#username").count():
-                if not email or not password:
-                    raise LinkedInPosterError(
-                        "The saved LinkedIn session expired. Run "
-                        "`python linkedin_poster.py --setup-browser-session` again."
+                # Navigate with a longer timeout and networkidle for reliability.
+                try:
+                    page.goto(
+                        "https://www.linkedin.com/feed/",
+                        wait_until="networkidle",
+                        timeout=60_000,
                     )
-                page.goto(
-                    "https://www.linkedin.com/login",
-                    wait_until="domcontentloaded",
-                )
-                page.locator("#username").fill(email)
-                page.locator("#password").fill(password)
-                page.locator('button[type="submit"]').click()
-                page.wait_for_url("**/feed/**", timeout=30_000)
-                storage_state_file.parent.mkdir(parents=True, exist_ok=True)
-                context.storage_state(path=str(storage_state_file))
+                except Exception:
+                    # Fallback to domcontentloaded if networkidle times out.
+                    page.goto(
+                        "https://www.linkedin.com/feed/",
+                        wait_until="domcontentloaded",
+                        timeout=60_000,
+                    )
 
-            if any(marker in page.url for marker in ("checkpoint", "challenge")):
-                raise LinkedInPosterError(
-                    "LinkedIn requires a manual security check; browser posting stopped."
+                # Handle login if session expired or not present.
+                # Only check URL — the DOM check is unreliable because LinkedIn
+                # keeps a hidden #username element on the feed page.
+                needs_login = (
+                    "/login" in page.url
+                    or "/uas/login" in page.url
+                    or "/authwall" in page.url
                 )
+                if needs_login:
+                    if not email or not password:
+                        raise LinkedInPosterError(
+                            "The saved LinkedIn session expired. Run "
+                            "`python linkedin_poster.py --setup-browser-session` again."
+                        )
+                    LOGGER.info("LinkedIn session expired; logging in with credentials.")
+                    page.goto(
+                        "https://www.linkedin.com/login",
+                        wait_until="domcontentloaded",
+                        timeout=30_000,
+                    )
+                    try:
+                        page.locator("#username").wait_for(state="visible", timeout=10_000)
+                        page.locator("#username").fill(email)
+                        page.locator("#password").fill(password)
+                        page.locator('button[type="submit"]').click()
+                        page.wait_for_url("**/feed/**", timeout=60_000)
+                    except Exception as login_exc:
+                        # If the page already navigated to feed the login succeeded.
+                        if "/feed/" not in page.url:
+                            raise LinkedInPosterError(
+                                f"LinkedIn login failed: {login_exc}"
+                            ) from login_exc
+                        LOGGER.info("LinkedIn login redirect detected; continuing.")
+                    # Save refreshed session so future runs skip login.
+                    storage_state_file.parent.mkdir(parents=True, exist_ok=True)
+                    context.storage_state(path=str(storage_state_file))
+                    try:
+                        storage_state_file.chmod(0o600)
+                    except OSError:
+                        pass
+                    LOGGER.info("LinkedIn session refreshed and saved.")
 
-            start = page.get_by_role("button", name="Start a post", exact=True)
-            start.wait_for(state="visible", timeout=20_000)
-            start.click()
-            dialog = page.get_by_role("dialog")
-            editor = dialog.locator('[contenteditable="true"][role="textbox"]')
-            editor.wait_for(state="visible", timeout=10_000)
-            editor.fill(content)
-            post_button = dialog.get_by_role("button", name="Post", exact=True)
-            post_button.click()
-            dialog.wait_for(state="hidden", timeout=20_000)
-            browser.close()
-            return True
-    except PlaywrightTimeoutError as exc:
-        LOGGER.error("LinkedIn browser UI did not reach the expected state: %s", exc)
-        return False
-    except LinkedInPosterError:
-        raise
-    except Exception as exc:
-        LOGGER.error("LinkedIn browser posting failed: %s", exc)
-        return False
+                if any(marker in page.url for marker in ("checkpoint", "challenge")):
+                    raise LinkedInPosterError(
+                        "LinkedIn requires a manual security check; browser posting stopped."
+                    )
+
+                # Wait for the feed to be fully interactive.
+                page.wait_for_load_state("domcontentloaded")
+
+                # Try both exact and partial match for the "Start a post" button.
+                start = page.get_by_role("button", name="Start a post", exact=True)
+                if not start.count():
+                    start = page.get_by_role("button", name="Start a post")
+                start.wait_for(state="visible", timeout=30_000)
+                start.click()
+
+                dialog = page.get_by_role("dialog")
+                editor = dialog.locator('[contenteditable="true"][role="textbox"]')
+                editor.wait_for(state="visible", timeout=20_000)
+                editor.click()
+                editor.fill(content)
+
+                # Small pause so LinkedIn registers the text before clicking Post.
+                page.wait_for_timeout(500)
+
+                post_button = dialog.get_by_role("button", name="Post", exact=True)
+                post_button.wait_for(state="visible", timeout=10_000)
+                post_button.click()
+                dialog.wait_for(state="hidden", timeout=30_000)
+                browser.close()
+                return True
+
+        except LinkedInPosterError:
+            raise
+        except PlaywrightTimeoutError as exc:
+            last_exc = exc
+            LOGGER.warning(
+                "LinkedIn browser UI timeout on attempt %d/%d: %s",
+                attempt, max_retries, exc,
+            )
+        except Exception as exc:
+            last_exc = exc
+            LOGGER.warning(
+                "LinkedIn browser posting failed on attempt %d/%d: %s",
+                attempt, max_retries, exc,
+            )
+
+    LOGGER.error(
+        "LinkedIn browser posting failed after %d attempts: %s", max_retries, last_exc
+    )
+    return False
 
 
 def setup_browser_session(

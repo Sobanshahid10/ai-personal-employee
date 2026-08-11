@@ -49,6 +49,7 @@ from workflow_utils import (
     load_frontmatter_file,
     load_json_object,
     move_file,
+    write_frontmatter,
 )
 
 
@@ -557,6 +558,14 @@ def process_approval(
                 LOGGER.exception("Could not append failure audit event.")
             if path.exists():
                 try:
+                    try:
+                        meta, body = load_frontmatter_file(path)
+                        meta["status"] = "failed"
+                        meta["error"] = f"{type(exc).__name__}: {exc}"
+                        meta["failed_at"] = isoformat_utc()
+                        write_frontmatter(path, meta, body)
+                    except Exception:
+                        LOGGER.exception("Could not inject error metadata into failed artifact %s", path)
                     route_file(path, FAILED_DIR)
                 except OSError:
                     LOGGER.exception("Could not move failed artifact %s", path)

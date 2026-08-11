@@ -317,9 +317,15 @@ function itemCard(item, withActions = false) {
     senderText = `Category: ${item.metadata.category.replace(/_/g, " ")} · `;
   }
   const itemDate = item.metadata?.received_at || item.metadata?.created_at || item.metadata?.date || item.display_date || item.modified_at;
-  detail.textContent = `${senderText}${formatDate(itemDate)}`;
-
   main.append(titleRow, detail);
+
+  const errReason = item.metadata?.error || item.metadata?.failure_reason || item.metadata?.parse_error || item.parse_error;
+  if (errReason || item.folder === "failed") {
+    const errorBox = document.createElement("div");
+    errorBox.className = "card-error-banner";
+    errorBox.textContent = `⚠️ Reason: ${errReason || "Execution or ingestion failed"}`;
+    main.append(errorBox);
+  }
 
   const open = () => openDetail(item.folder, item.name);
   main.addEventListener("click", open);
@@ -439,10 +445,18 @@ function timelineEvent(entry) {
 
   node.append(headerRow, title, detail);
 
+  let errorText = entry.error || entry.failure_reason || (entry.status === "failed" ? entry.details : "");
+  if (typeof errorText === "object") errorText = JSON.stringify(errorText);
+
   let narrativeText = entry.details || entry.why_it_matters || entry.reason || "";
   if (typeof narrativeText === "object") narrativeText = JSON.stringify(narrativeText);
 
-  if (narrativeText) {
+  if (errorText) {
+    const errNarrative = document.createElement("div");
+    errNarrative.className = "event-narrative event-error-banner";
+    errNarrative.textContent = `⚠️ Error: ${errorText}`;
+    node.append(errNarrative);
+  } else if (narrativeText) {
     const narrative = document.createElement("div");
     narrative.className = "event-narrative";
     narrative.textContent = narrativeText;
@@ -721,6 +735,23 @@ async function openDetail(folder, name) {
       shaBadge.classList.remove("hidden");
     } else if (shaBadge) {
       shaBadge.classList.add("hidden");
+    }
+
+    // Render Failure Callout Banner if item failed or has error
+    let errorCallout = $("#modal-error-callout");
+    const failureMsg = meta.error || meta.failure_reason || meta.parse_error || meta.escalation_reason || (folder === "failed" ? "Execution failed or file was quarantined." : "");
+    if (failureMsg) {
+      if (!errorCallout) {
+        errorCallout = document.createElement("div");
+        errorCallout.id = "modal-error-callout";
+        errorCallout.className = "modal-error-callout";
+        const bodyElem = $(".modal-body") || $("#detail-modal");
+        if (bodyElem) bodyElem.prepend(errorCallout);
+      }
+      errorCallout.innerHTML = `<strong>⚠️ Failure Reason:</strong> <span>${escapeHtml(failureMsg)}</span>`;
+      errorCallout.classList.remove("hidden");
+    } else if (errorCallout) {
+      errorCallout.classList.add("hidden");
     }
 
     // Check if item has draft reply / response
