@@ -296,34 +296,43 @@ class GmailDirectSender:
         thread_id: str | None = None,
         message_id_header: str | None = None,
     ) -> dict[str, Any]:
-        service, from_address = self._connect()
-        message = EmailMessage()
-        message["To"] = recipient
-        message["From"] = from_address
-        message["Subject"] = subject
-        if message_id_header:
-            message["In-Reply-To"] = message_id_header
-            message["References"] = message_id_header
-        message.set_content(draft_body)
-        
-        html_payload = html_body if html_body else render_html_email(draft_body, subject=subject)
-        message.add_alternative(html_payload, subtype="html")
+        last_exc: Exception | None = None
+        for attempt in range(1, 4):
+            try:
+                service, from_address = self._connect()
+                message = EmailMessage()
+                message["To"] = recipient
+                message["From"] = from_address
+                message["Subject"] = subject
+                if message_id_header:
+                    message["In-Reply-To"] = message_id_header
+                    message["References"] = message_id_header
+                message.set_content(draft_body)
 
-        raw = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii")
-        send_body: dict[str, Any] = {"raw": raw}
-        if thread_id:
-            send_body["threadId"] = thread_id
-        response = (
-            service.users()
-            .messages()
-            .send(userId=GMAIL_USER_ID, body=send_body)
-            .execute(num_retries=GMAIL_RETRIES)
-        )
-        return {
-            "provider": "gmail",
-            "message_id": response.get("id"),
-            "thread_id": response.get("threadId"),
-        }
+                html_payload = html_body if html_body else render_html_email(draft_body, subject=subject)
+                message.add_alternative(html_payload, subtype="html")
+
+                raw = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii")
+                send_body: dict[str, Any] = {"raw": raw}
+                if thread_id:
+                    send_body["threadId"] = thread_id
+                response = (
+                    service.users()
+                    .messages()
+                    .send(userId=GMAIL_USER_ID, body=send_body)
+                    .execute(num_retries=GMAIL_RETRIES)
+                )
+                return {
+                    "provider": "gmail",
+                    "message_id": response.get("id"),
+                    "thread_id": response.get("threadId"),
+                }
+            except Exception as exc:
+                last_exc = exc
+                LOGGER.warning("Gmail send_exact attempt %d/3 failed: %s; resetting connection.", attempt, exc)
+                self._service = None
+                time.sleep(2)
+        raise ActionExecutionError(f"Gmail send failed after 3 attempts: {last_exc}") from last_exc
 
 
 def execute_linkedin(path: Path) -> dict[str, Any]:
