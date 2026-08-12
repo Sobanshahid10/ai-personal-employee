@@ -297,6 +297,40 @@ There is new activity in a watched repository. Unsubscribe.
                 source="unsafe.md",
             )
 
+    def test_linkedin_post_enhancement_uses_executive_prompt_and_temp(self) -> None:
+        item = reasoning_loop.SourceItem(
+            path=Path("dummy.md"),
+            metadata={"action_id": "linkedin_123", "subject": "Post on LinkedIn: Open Source Launch"},
+            body="We launched our open source AI personal employee system!",
+        )
+        fake_post = (
+            "🚀 Big News! We just launched our open-source AI Personal Employee system!\n\n"
+            "Highlights:\n• Autonomous reasoning\n• Human-in-the-loop approvals\n\n"
+            "What do you think? Let us know! 💬\n\n#AI #OpenSource #Tech"
+        )
+        client = FakeGroq([fake_post])
+        result = reasoning_loop.draft_linkedin_post(client, item)
+
+        self.assertEqual(result, fake_post)
+        self.assertEqual(len(client.completions.calls), 1)
+        call_args = client.completions.calls[0]
+        self.assertEqual(call_args["temperature"], 0.7)
+        self.assertIn("expert executive LinkedIn content strategist", call_args["messages"][0]["content"])
+        self.assertIn("THINK & ENHANCE", call_args["messages"][0]["content"])
+
+    def test_fallback_linkedin_post_formatting(self) -> None:
+        item = reasoning_loop.SourceItem(
+            path=Path("dummy.md"),
+            metadata={"action_id": "linkedin_456", "subject": "Post on LinkedIn: Product Update"},
+            body="Post on LinkedIn: Built a python bot\nAdded human approval workflow\nIntegrated Groq LLM",
+        )
+        fallback = reasoning_loop.draft_linkedin_post(client=None, item=item)
+        self.assertNotIn("Post on LinkedIn:", fallback)
+        self.assertIn("Product Update", fallback)
+        self.assertIn("• Built a python bot", fallback)
+        self.assertIn("• Added human approval workflow", fallback)
+        self.assertIn("#ChiefMind", fallback)
+
 
 if __name__ == "__main__":
     unittest.main()

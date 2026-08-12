@@ -34,6 +34,7 @@ from config import (
     GROQ_MODEL,
     GROQ_RETRIES,
     GROQ_RETRY_DELAY,
+    LINKEDIN_DRAFT_TEMPERATURE,
     NEEDS_ACTION_DIR,
     PENDING_APPROVAL_DIR,
     PLANS_DIR,
@@ -511,22 +512,73 @@ Write the exact ready-to-send reply body."""
     )
 
 
+def _clean_linkedin_prompt_text(text: str) -> str:
+    """Strip common lead-in phrases like 'Post on LinkedIn:' from user requests."""
+    cleaned = re.sub(
+        r"(?i)^(please\s+)?(post|share|publish|draft|create)\s+(this\s+)?(on\s+)?linkedin\s*:\s*",
+        "",
+        text.strip(),
+    )
+    cleaned = re.sub(
+        r"(?i)^(linkedin\s+post\s+request|linkedin\s+post)\s*:\s*",
+        "",
+        cleaned.strip(),
+    )
+    return cleaned.strip()
+
+
+def _fallback_linkedin_post(item: SourceItem) -> str:
+    """Generate a clean, structured fallback post when LLM is unavailable."""
+    clean_subj = _clean_linkedin_prompt_text(item.subject)
+    clean_body = _clean_linkedin_prompt_text(item.body)
+    
+    # Avoid repeating subject if body already contains it
+    topic = clean_subj if clean_subj and clean_subj.lower() not in clean_body.lower() else ""
+    header = f"🚀 Exciting Update: {topic}\n\n" if topic else "🚀 ChiefMind Milestone Update!\n\n"
+    
+    lines = [line.strip("- *• ") for line in clean_body.splitlines() if line.strip()]
+    if len(lines) > 1:
+        formatted_body = "Key Highlights:\n" + "\n".join(f"• {line}" for line in lines)
+    else:
+        formatted_body = clean_body
+
+    return (
+        f"{header}"
+        f"We are excited to share our latest development:\n\n"
+        f"{formatted_body}\n\n"
+        f"What are your thoughts on this milestone? Let us know below! 💬\n\n"
+        f"#ChiefMind #AI #Innovation #Productivity #Tech"
+    )
+
+
 def draft_linkedin_post(
     client: Groq | None,
     item: SourceItem,
 ) -> str:
-    """Draft an engaging LinkedIn post body from source request."""
+    """Draft an engaging, enhanced LinkedIn post body from source request."""
     if client is None:
-        return (
-            f"🚀 ChiefMind Update: {item.subject}\n\n"
-            f"We are excited to share a key milestone!\n\n"
-            f"{item.body}\n\n"
-            "#ChiefMind #AI #Automation #Productivity"
-        )
-    system_prompt = """You draft engaging, professional LinkedIn posts for ChiefMind.
-Return ONLY the complete post body text with clear paragraph spacing, key feature highlights, and 3-5 relevant hashtags.
-Do NOT include any subject line, commentary, or markdown code fences."""
-    user_prompt = f"Request details:\nSubject: {item.subject}\n\nBody:\n{item.body}"
+        return _fallback_linkedin_post(item)
+
+    system_prompt = """You are an expert executive LinkedIn content strategist for ChiefMind.
+Your task is to take the provided raw request/notes/announcement and draft a highly polished, professional, engaging, and high-impact LinkedIn post.
+
+CRITICAL INSTRUCTIONS:
+1. THINK & ENHANCE: Do NOT simply copy-paste or repeat the raw input verbatim. Analyze the underlying achievement, breakthrough, or announcement, articulate its key value insights, and polish the tone to sound authentic, authoritative, and engaging.
+2. STRUCTURE & FORMATTING:
+   - HOOK: Open with an attention-grabbing 1-2 line hook that entices readers in the LinkedIn feed.
+   - STORY / CONTEXT: Provide concise, high-value context explaining the core breakthrough or milestone.
+   - HIGHLIGHTS: Use clean bullet points with relevant emojis to highlight key features, achievements, or lessons.
+   - CALL TO ACTION (CTA): End with an engaging question or invitation for discussion.
+   - HASHTAGS: Conclude with 3-5 strategically relevant, popular hashtags.
+3. OUTPUT REQUIREMENT: Return ONLY the exact, complete post text. Do NOT include markdown code fences (```), meta-commentary, or headers like "Subject:"."""
+
+    clean_subj = _clean_linkedin_prompt_text(item.subject)
+    clean_body = _clean_linkedin_prompt_text(item.body)
+    user_prompt = (
+        f"Topic/Subject: {clean_subj}\n"
+        f"Raw Input Details:\n{clean_body}\n\n"
+        f"Transform this input into a compelling, beautifully formatted LinkedIn post."
+    )
 
     models_to_try = [GROQ_MODEL]
     if "llama-3.1-8b-instant" not in models_to_try:
@@ -541,23 +593,21 @@ Do NOT include any subject line, commentary, or markdown code fences."""
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt},
                     ],
-                    temperature=EMAIL_DRAFT_TEMPERATURE,
+                    temperature=LINKEDIN_DRAFT_TEMPERATURE,
                     max_tokens=REASONING_MAX_TOKENS,
                 ),
                 f"Groq LinkedIn drafting ({model_name})",
             )
             draft = _response_text(response)
             if draft and not draft.startswith("```"):
-                return draft
+                # Clean any lingering markdown code block wrapper if present
+                draft_clean = re.sub(r"^```(?:markdown|text)?\n?", "", draft, flags=re.IGNORECASE)
+                draft_clean = re.sub(r"\n?```$", "", draft_clean).strip()
+                return draft_clean
         except LLMUnavailableError as exc:
             LOGGER.warning("LinkedIn drafting with model %s failed: %s; trying fallback", model_name, exc)
 
-    return (
-        f"🚀 ChiefMind Update: {item.subject}\n\n"
-        f"We are excited to share a key milestone!\n\n"
-        f"{item.body}\n\n"
-        "#ChiefMind #AI #Automation #Productivity"
-    )
+    return _fallback_linkedin_post(item)
 
 
 def extract_knowledge_references(context: str) -> list[str]:
