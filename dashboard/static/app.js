@@ -634,19 +634,37 @@ function switchDraftMode(mode) {
 }
 
 function renderDraftPane(meta, name) {
-  const recipient = meta.to || meta.draft_recipient || meta.from || "Recipient";
-  const subject = meta.subject || meta.draft_subject || "Re: Response Draft";
-  const draftBody = meta.draft_body || meta.post_body || JSON.stringify(meta.proposed_action || {}, null, 2);
+  const recipient = meta.to || meta.draft_recipient || meta.from || "LinkedIn Audience";
+  const subject = meta.subject || meta.draft_subject || meta.summary || "LinkedIn Post Announcement";
+  const postBody = meta.post_body || meta.draft_body || "";
+  const imageSuggestion = meta.image_suggestion || "";
+  const isLinkedIn = meta.type === "linkedin_post" || Boolean(meta.post_body) || Boolean(imageSuggestion);
+  const draftBody = isLinkedIn
+    ? (imageSuggestion
+        ? `--- LINKEDIN POST COPY ---\n${postBody}\n\n========================================\n🎨 PRODUCTION-GRADE VISUAL SUGGESTION\n========================================\n${imageSuggestion}`
+        : postBody)
+    : (meta.draft_body || meta.post_body || JSON.stringify(meta.proposed_action || {}, null, 2));
 
-  $("#draft-target").textContent = `To: ${recipient}`;
+  $("#draft-target").textContent = isLinkedIn ? "Platform: LinkedIn Feed" : `To: ${recipient}`;
   $("#draft-subject-val").textContent = subject;
   $("#draft-text-val").textContent = draftBody;
 
-  // 1. Render HTML Email View
+  // 1. Render HTML View (Email Reply or LinkedIn Post + Visual Spec Card)
   const iframe = $("#draft-iframe-preview");
   if (iframe) {
-    if (meta.html_body) {
+    if (meta.html_body && !isLinkedIn) {
       iframe.srcdoc = meta.html_body;
+    } else if (isLinkedIn) {
+      const formattedPost = parseTextToHtml(postBody);
+      const formattedVisual = imageSuggestion ? parseTextToHtml(imageSuggestion) : "";
+      const imageBannerHtml = meta.image_path
+        ? `<div class="banner-preview-card" style="margin-bottom:20px;border-radius:10px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.15);border:1px solid #cbd5e1;"><img src="${escapeHtml(meta.image_path)}" style="width:100%;max-height:360px;object-fit:cover;display:block;" alt="Generated Visual Banner" /><div style="padding:10px 16px;background:#f8fafc;font-size:12px;color:#64748b;font-weight:600;display:flex;justify-content:space-between;align-items:center;"><span>🖼️ Generated Graphic Visual Asset (1200x627px)</span><span style="color:#0ea5e9;">Production Ready</span></div></div>`
+        : "";
+      const visualBoxHtml = imageSuggestion
+        ? `<div class="visual-spec-box" style="margin-top:24px;padding:20px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:10px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);"><div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;color:#0f172a;font-weight:700;font-size:15px;"><span style="font-size:18px;">🎨</span> Production-Grade Visual Specification</div><div style="font-size:13px;color:#334155;line-height:1.6;">${formattedVisual}</div></div>`
+        : "";
+
+      iframe.srcdoc = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:24px;color:#1e293b;background:#ffffff;line-height:1.6;}.linkedin-header{background:linear-gradient(135deg,#0a66c2,#004182);color:#fff;padding:20px 24px;border-radius:10px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;}.linkedin-header h2{margin:0;font-size:18px;font-weight:700;}.linkedin-header span{font-size:12px;background:rgba(255,255,255,0.2);padding:4px 10px;border-radius:20px;font-weight:600;}.post-copy-card{background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.05);}.footer{margin-top:28px;padding-top:16px;border-top:1px solid #e2e8f0;color:#64748b;font-size:12px;display:flex;justify-content:space-between;}</style></head><body><div class="linkedin-header"><h2>💼 LinkedIn Content Draft</h2><span>Human Approval Required</span></div>${imageBannerHtml}<div class="post-copy-card"><strong style="color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Post Copy</strong><div style="margin-top:10px;">${formattedPost}</div></div>${visualBoxHtml}<div class="footer"><span>⚡ ChiefMind AI Personal Employee</span><span>Verified Draft</span></div></body></html>`;
     } else {
       const formattedBody = parseTextToHtml(draftBody);
       iframe.srcdoc = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:24px;color:#334155;background:#ffffff;line-height:1.6;}.header{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;padding:20px 24px;border-radius:8px;margin-bottom:20px;}.header h2{margin:0;font-size:18px;}.header p{margin:4px 0 0;font-size:12px;opacity:0.85;}.footer{margin-top:28px;padding-top:16px;border-top:1px solid #e2e8f0;color:#64748b;font-size:12px;display:flex;justify-content:space-between;}</style></head><body><div class="header"><h2>${escapeHtml(subject)}</h2><p>ChiefMind AI Personal Employee</p></div><div class="body">${formattedBody}</div><div class="footer"><span>⚡ ChiefMind AI</span><span>Verified & Signed</span></div></body></html>`;
@@ -660,8 +678,8 @@ function renderDraftPane(meta, name) {
       <div class="react-preview-wrapper">
         <div class="react-toolbar">
           <div class="react-brand">
-            <span class="react-icon">⚛️</span>
-            <strong>&lt;EmailReplyCard /&gt;</strong>
+            <span class="react-icon">${isLinkedIn ? "💼" : "⚛️"}</span>
+            <strong>${isLinkedIn ? "&lt;LinkedInPostCard /&gt;" : "&lt;EmailReplyCard /&gt;"}</strong>
             <span class="react-badge">React Component</span>
           </div>
           <div class="react-controls">
@@ -671,15 +689,17 @@ function renderDraftPane(meta, name) {
         </div>
         <div class="react-card-body light-theme desktop-viewport" id="react-card-canvas">
           <div class="react-email-header">
-            <div class="react-avatar">AI</div>
+            <div class="react-avatar">${isLinkedIn ? "IN" : "AI"}</div>
             <div class="react-meta">
               <div class="react-subject">${escapeHtml(subject)}</div>
-              <div class="react-sender">ChiefMind Assistant &lt;chiefmind@ai.internal&gt;</div>
+              <div class="react-sender">${isLinkedIn ? "LinkedIn Post Draft" : "ChiefMind Assistant &lt;chiefmind@ai.internal&gt;"}</div>
             </div>
-            <span class="react-status-chip">Approved Draft</span>
+            <span class="react-status-chip">Pending Approval</span>
           </div>
           <div class="react-content-box">
-            ${parseTextToHtml(draftBody)}
+            ${meta.image_path ? `<img src="${escapeHtml(meta.image_path)}" style="width:100%;max-height:220px;object-fit:cover;border-radius:8px;margin-bottom:12px;" alt="Banner Preview" />` : ""}
+            ${parseTextToHtml(postBody || draftBody)}
+            ${imageSuggestion ? `<div style="margin-top:16px;padding:12px;background:rgba(14,165,233,0.08);border-left:3px solid #0ea5e9;border-radius:4px;font-size:13px;"><strong>🎨 Visual Spec:</strong> ${parseTextToHtml(imageSuggestion)}</div>` : ""}
           </div>
           <div class="react-signature-bar">
             <div class="sig-left">

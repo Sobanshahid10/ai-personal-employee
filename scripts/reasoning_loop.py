@@ -171,9 +171,21 @@ def _decision_from_assessment(
     else:
         text_check = assessment.summary.lower()
 
-    is_linkedin = bool(re.search(r"\blinkedin\b", text_check))
+    is_explicit_linkedin = bool(re.search(r"\blinkedin\b", text_check))
+    is_opportunity = bool(re.search(
+        r"\b(partnership|collaboration|collaborate|joint venture|milestone|business win|deal signed|client win|case study|product launch|feature launch|keynote|speaker|speaking|podcast guest|award|recognition|announcement|breakthrough|achievement)\b",
+        text_check,
+        re.IGNORECASE,
+    ))
 
-    if is_linkedin:
+    if is_explicit_linkedin or (
+        is_opportunity
+        and (
+            assessment.reply_intent == "required"
+            or "EXTERNAL_COMMUNICATION" in assessment.classifications
+            or "USER_ACTION_REQUIRED" in assessment.classifications
+        )
+    ):
         action_type = "linkedin_post"
     elif (
         assessment.reply_intent == "required"
@@ -527,27 +539,71 @@ def _clean_linkedin_prompt_text(text: str) -> str:
     return cleaned.strip()
 
 
+def _clean_email_artifacts(text: str) -> str:
+    """Strip salutations, email footers, sign-offs, and meta headers from intake body."""
+    lines: list[str] = []
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if re.match(r"(?i)^(hi|hello|dear|hey)\b", line):
+            continue
+        if re.match(r"(?i)^(best regards|regards|thanks|thank you|sincerely|cheers)\b", line):
+            continue
+        if re.match(r"(?i)^(vp of|ceo|cto|founder|director|manager)\b", line):
+            continue
+        lines.append(line)
+    return "\n".join(lines)
+
+
 def _fallback_linkedin_post(item: SourceItem) -> str:
-    """Generate a clean, structured fallback post when LLM is unavailable."""
+    """Generate executive-level production-grade LinkedIn post copy."""
     clean_subj = _clean_linkedin_prompt_text(item.subject)
-    clean_body = _clean_linkedin_prompt_text(item.body)
+    raw_clean = _clean_email_artifacts(_clean_linkedin_prompt_text(item.body))
     
-    # Avoid repeating subject if body already contains it
-    topic = clean_subj if clean_subj and clean_subj.lower() not in clean_body.lower() else ""
-    header = f"🚀 Exciting Update: {topic}\n\n" if topic else "🚀 ChiefMind Milestone Update!\n\n"
+    header = f"🚀 Strategic Milestone: {clean_subj}\n\n" if clean_subj else "🚀 Executive Strategic Update!\n\n"
     
-    lines = [line.strip("- *• ") for line in clean_body.splitlines() if line.strip()]
-    if len(lines) > 1:
-        formatted_body = "Key Highlights:\n" + "\n".join(f"• {line}" for line in lines)
-    else:
-        formatted_body = clean_body
+    bullets: list[str] = []
+    for line in raw_clean.splitlines():
+        clean_line = line.strip("- *• ")
+        if clean_line and len(clean_line) > 12 and not re.match(r"(?i)^(let's coordinate|following up)\b", clean_line):
+            bullets.append(f"• {clean_line}")
+
+    if not bullets:
+        bullets = [
+            "• Expanding enterprise AI automation capabilities across global operations.",
+            "• Streamlining multi-channel workflows with human-in-the-loop governance.",
+        ]
+
+    bullets_text = "\n".join(bullets[:4])
 
     return (
         f"{header}"
-        f"We are excited to share our latest development:\n\n"
-        f"{formatted_body}\n\n"
-        f"What are your thoughts on this milestone? Let us know below! 💬\n\n"
-        f"#ChiefMind #AI #Innovation #Productivity #Tech"
+        f"We are proud to announce a major breakthrough in enterprise AI collaboration:\n\n"
+        f"{bullets_text}\n\n"
+        f"This milestone reflects our commitment to building reliable, high-impact autonomous AI systems for modern enterprises.\n\n"
+        f"How is your organization scaling AI workflow automation this year? Drop your insights below! 💬\n\n"
+        f"#AI #EnterpriseTech #Innovation #Leadership #FutureOfWork"
+    )
+
+
+def _fallback_image_suggestion(item: SourceItem) -> str:
+    """Generate a production-grade image/visual specification when LLM is unavailable."""
+    clean_subj = _clean_linkedin_prompt_text(item.subject) or "Business Milestone"
+    return (
+        "🎨 PRODUCTION-GRADE VISUAL SPECIFICATION\n\n"
+        "• COMPOSITION & LAYOUT: Split-screen horizontal layout (1200x627px for LinkedIn feed). "
+        "Left 60%: Dynamic graphic container with high-contrast dark theme background. Right 40%: Typography overlay with key visual takeaway.\n\n"
+        "• COLOR PALETTE:\n"
+        "  - Background: Deep Obsidian Slate (#0F172A)\n"
+        "  - Accent: Vibrant Electric Blue (#0EA5E9) & Gradient Cyan (#38BDF8)\n"
+        "  - Text: Crisp White (#FFFFFF) & Subdued Light Silver (#94A3B8)\n\n"
+        "• TYPOGRAPHY:\n"
+        "  - Headline: Bold Modern Sans-Serif (Inter / Outfit), tight tracking.\n"
+        "  - Subtitle: Medium Weight Sans-Serif, 80% opacity.\n\n"
+        f"• GRAPHIC & PHOTO ELEMENTS: Abstract vector network nodes representing collaboration and growth. "
+        f"Center badge highlight for: '{clean_subj}'. Subtle frosted glassmorphism card backdrop behind overlay text.\n\n"
+        "• MOOD & AESTHETIC: Modern executive tech aesthetic; polished, dynamic, non-templated, and high-impact."
     )
 
 
@@ -555,29 +611,33 @@ def draft_linkedin_post(
     client: Groq | None,
     item: SourceItem,
 ) -> str:
-    """Draft an engaging, enhanced LinkedIn post body from source request."""
+    """Draft an engaging, tone-tailored LinkedIn post body from source request."""
     if client is None:
         return _fallback_linkedin_post(item)
 
     system_prompt = """You are an expert executive LinkedIn content strategist for ChiefMind.
-Your task is to take the provided raw request/notes/announcement and draft a highly polished, professional, engaging, and high-impact LinkedIn post.
+Your task is to take raw email details or opportunity notes (partnerships, achievements, collaborations, product releases, client wins) and draft a highly polished, authentic, human, and high-impact LinkedIn post.
 
 CRITICAL INSTRUCTIONS:
-1. THINK & ENHANCE: Do NOT simply copy-paste or repeat the raw input verbatim. Analyze the underlying achievement, breakthrough, or announcement, articulate its key value insights, and polish the tone to sound authentic, authoritative, and engaging.
-2. STRUCTURE & FORMATTING:
-   - HOOK: Open with an attention-grabbing 1-2 line hook that entices readers in the LinkedIn feed.
-   - STORY / CONTEXT: Provide concise, high-value context explaining the core breakthrough or milestone.
-   - HIGHLIGHTS: Use clean bullet points with relevant emojis to highlight key features, achievements, or lessons.
-   - CALL TO ACTION (CTA): End with an engaging question or invitation for discussion.
+1. AUTHENTIC EXECUTIVE VOICE: Craft compelling copy reflecting a professional yet personable executive voice. Highlight impact, lessons learned, and genuine business value. Sound human, direct, and engaging—never corporate, templated, or robotic.
+2. TAILOR TONE: Adjust tone based on the opportunity type:
+   - Partnership / Collaboration: Warm, collaborative, value-driven, highlighting synergy.
+   - Personal / Team Achievement: Celebratory yet humble, acknowledging team effort and key learnings.
+   - Product / Feature Release: Sharp, visionary, focused on user impact and technical breakthrough.
+3. STRUCTURE & FORMATTING:
+   - HOOK: Open with an attention-grabbing 1-2 line hook to stop the feed scroll.
+   - CONTEXT & STORY: Provide concise context on what happened, who was involved, and business impact.
+   - HIGHLIGHTS: Use clean bullet points with clean emojis.
+   - CTA: End with an engaging question or invitation for discussion.
    - HASHTAGS: Conclude with 3-5 strategically relevant, popular hashtags.
-3. OUTPUT REQUIREMENT: Return ONLY the exact, complete post text. Do NOT include markdown code fences (```), meta-commentary, or headers like "Subject:"."""
+4. OUTPUT REQUIREMENT: Return ONLY the exact, complete post text. Do NOT include markdown code fences (```), meta-commentary, or headers like "Subject:"."""
 
     clean_subj = _clean_linkedin_prompt_text(item.subject)
     clean_body = _clean_linkedin_prompt_text(item.body)
     user_prompt = (
         f"Topic/Subject: {clean_subj}\n"
         f"Raw Input Details:\n{clean_body}\n\n"
-        f"Transform this input into a compelling, beautifully formatted LinkedIn post."
+        f"Transform this input into an authentic, beautifully formatted LinkedIn post."
     )
 
     models_to_try = [GROQ_MODEL]
@@ -600,7 +660,6 @@ CRITICAL INSTRUCTIONS:
             )
             draft = _response_text(response)
             if draft and not draft.startswith("```"):
-                # Clean any lingering markdown code block wrapper if present
                 draft_clean = re.sub(r"^```(?:markdown|text)?\n?", "", draft, flags=re.IGNORECASE)
                 draft_clean = re.sub(r"\n?```$", "", draft_clean).strip()
                 return draft_clean
@@ -608,6 +667,64 @@ CRITICAL INSTRUCTIONS:
             LOGGER.warning("LinkedIn drafting with model %s failed: %s; trying fallback", model_name, exc)
 
     return _fallback_linkedin_post(item)
+
+
+def draft_image_suggestion(
+    client: Groq | None,
+    item: SourceItem,
+    post_body: str = "",
+) -> str:
+    """Generate a production-grade image/visual specification for the post."""
+    if client is None:
+        return _fallback_image_suggestion(item)
+
+    system_prompt = """You are an expert executive creative director and visual designer for LinkedIn content.
+Your task is to create a production-grade visual/image description that complements the given LinkedIn post or business opportunity.
+
+CRITICAL INSTRUCTIONS:
+Provide a detailed, precise production-grade visual specification suitable for a designer or AI image generator (Midjourney, DALL-E, Canva).
+Your output MUST include specific guidance for:
+1. COMPOSITION & LAYOUT: Aspect ratio (1200x627 landscape or 1080x1350 vertical), grid alignment, visual hierarchy, and focal points.
+2. COLOR PALETTE: Primary, secondary, and accent colors with explicit hex codes or color names.
+3. TYPOGRAPHY: Font style, weight hierarchy, text overlay placement, and readability constraints.
+4. GRAPHIC & PHOTO ELEMENTS: Specific visual assets, partner logos, vector graphics, chart types, or photographic style needed.
+5. MOOD & AESTHETIC: Executive tech aesthetic (glassmorphism, dynamic lighting gradients, crisp modern UI).
+
+OUTPUT REQUIREMENT: Return ONLY the exact formatted visual suggestion text without markdown code fences (```)."""
+
+    user_prompt = (
+        f"Opportunity Topic: {item.subject}\n"
+        f"Post Body Copy:\n{post_body or item.body}\n\n"
+        f"Generate a production-grade visual specification that perfectly complements this post."
+    )
+
+    models_to_try = [GROQ_MODEL]
+    if "llama-3.1-8b-instant" not in models_to_try:
+        models_to_try.append("llama-3.1-8b-instant")
+
+    for model_name in models_to_try:
+        try:
+            response = _retry(
+                lambda m=model_name: client.chat.completions.create(
+                    model=m,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    temperature=LINKEDIN_DRAFT_TEMPERATURE,
+                    max_tokens=REASONING_MAX_TOKENS,
+                ),
+                f"Groq image suggestion drafting ({model_name})",
+            )
+            draft = _response_text(response)
+            if draft and not draft.startswith("```"):
+                draft_clean = re.sub(r"^```(?:markdown|text)?\n?", "", draft, flags=re.IGNORECASE)
+                draft_clean = re.sub(r"\n?```$", "", draft_clean).strip()
+                return draft_clean
+        except LLMUnavailableError as exc:
+            LOGGER.warning("Image suggestion drafting with model %s failed: %s; trying fallback", model_name, exc)
+
+    return _fallback_image_suggestion(item)
 
 
 def extract_knowledge_references(context: str) -> list[str]:
@@ -726,6 +843,7 @@ def _create_approval(
     references: list[str],
     created_at: datetime,
     draft_body: str | None,
+    client: Groq | None = None,
 ) -> Path:
     metadata: dict[str, Any] = {
         "action_id": item.action_id,
@@ -773,14 +891,32 @@ def _create_approval(
             email_meta["message_id_header"] = str(item.metadata["message_id_header"])
         metadata.update(email_meta)
     elif decision.action_type == "linkedin_post":
-        post_body = draft_body if draft_body else draft_linkedin_post(None, item)
-        metadata.update(
-            {
-                "post_body": LiteralString(post_body),
-                "summary": decision.summary,
-                "instructions": list(decision.steps),
-            }
-        )
+        post_body = draft_body if draft_body else draft_linkedin_post(client, item)
+        image_suggestion = draft_image_suggestion(client, item, post_body)
+        
+        # Generate production-grade visual graphic banner
+        rel_image_path = None
+        try:
+            from image_generator import generate_linkedin_banner
+            banner_path = generate_linkedin_banner(
+                action_id=_safe_fragment(item.action_id),
+                category=decision.category.upper().replace("_", " "),
+                headline=_clean_linkedin_prompt_text(item.subject),
+                subtext=decision.summary[:90] if decision.summary else "Executive Strategic Announcement",
+            )
+            rel_image_path = f"/static/generated_images/{banner_path.name}"
+        except Exception as img_exc:
+            LOGGER.warning("Could not generate LinkedIn graphic banner: %s", img_exc)
+
+        metadata_payload = {
+            "post_body": LiteralString(post_body),
+            "image_suggestion": LiteralString(image_suggestion),
+            "summary": decision.summary,
+            "instructions": list(decision.steps),
+        }
+        if rel_image_path:
+            metadata_payload["image_path"] = rel_image_path
+        metadata.update(metadata_payload)
     else:
         metadata.update(
             {
@@ -911,6 +1047,7 @@ def process_item(client: Groq | None, item: SourceItem) -> tuple[Path | None, Pa
             references,
             created_at,
             draft_body,
+            client=client,
         )
 
         # Ensure both Email Reply and LinkedIn Post approval artifacts exist when LinkedIn is involved
@@ -938,6 +1075,7 @@ def process_item(client: Groq | None, item: SourceItem) -> tuple[Path | None, Pa
                 references,
                 created_at,
                 email_draft,
+                client=client,
             )
 
         if is_linkedin_req and decision.action_type != "linkedin_post":
@@ -961,6 +1099,7 @@ def process_item(client: Groq | None, item: SourceItem) -> tuple[Path | None, Pa
                 references,
                 created_at,
                 linkedin_post_body,
+                client=client,
             )
         done_path = _relocate_source(
             item,

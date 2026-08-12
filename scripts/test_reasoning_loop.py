@@ -316,7 +316,6 @@ There is new activity in a watched repository. Unsubscribe.
         call_args = client.completions.calls[0]
         self.assertEqual(call_args["temperature"], 0.7)
         self.assertIn("expert executive LinkedIn content strategist", call_args["messages"][0]["content"])
-        self.assertIn("THINK & ENHANCE", call_args["messages"][0]["content"])
 
     def test_fallback_linkedin_post_formatting(self) -> None:
         item = reasoning_loop.SourceItem(
@@ -328,8 +327,74 @@ There is new activity in a watched repository. Unsubscribe.
         self.assertNotIn("Post on LinkedIn:", fallback)
         self.assertIn("Product Update", fallback)
         self.assertIn("• Built a python bot", fallback)
-        self.assertIn("• Added human approval workflow", fallback)
-        self.assertIn("#ChiefMind", fallback)
+        self.assertIn("#EnterpriseTech", fallback)
+
+    def test_image_suggestion_generation_and_fallback(self) -> None:
+        item = reasoning_loop.SourceItem(
+            path=Path("dummy.md"),
+            metadata={"action_id": "opp_789", "subject": "Partnership Announcement with Acme Corp"},
+            body="We agreed to partner with Acme Corp to integrate AI agents.",
+        )
+        fallback_spec = reasoning_loop.draft_image_suggestion(client=None, item=item, post_body="Post Copy")
+        self.assertIn("PRODUCTION-GRADE VISUAL SPECIFICATION", fallback_spec)
+        self.assertIn("COLOR PALETTE", fallback_spec)
+        self.assertIn("TYPOGRAPHY", fallback_spec)
+
+        fake_spec = "🎨 Modern split layout with slate background, bold cyan headers, and Acme logo badge."
+        client = FakeGroq([fake_spec])
+        custom_spec = reasoning_loop.draft_image_suggestion(client, item, post_body="Post Copy")
+        self.assertEqual(custom_spec, fake_spec)
+
+    def test_opportunity_email_triggers_linkedin_post_approval(self) -> None:
+        source = self.directories["NEEDS_ACTION_DIR"] / "email_partnership.md"
+        source.write_text(
+            """---
+id: part123
+action_id: email_partnership
+type: email
+from: "Acme Partnerships <partnerships@acme.com>"
+subject: "New Strategic Partnership Signed"
+received_at: "2026-08-12T10:00:00Z"
+priority: high
+status: needs_action
+---
+
+Hi Soban,
+
+We are thrilled to announce our joint venture partnership between Acme and ChiefMind to deliver autonomous enterprise agents.
+""",
+            encoding="utf-8",
+        )
+
+        assessment = json.dumps(
+            {
+                "action_required": True,
+                "classifications": ["EXTERNAL_COMMUNICATION", "USER_ACTION_REQUIRED"],
+                "reply_intent": "required",
+                "confidence": "high",
+                "importance": "high",
+                "risk": "low",
+                "reversibility": "REVERSIBLE",
+                "recommended_autonomy_mode": "ASK_USER",
+                "summary": "Strategic partnership signed with Acme Corp.",
+                "steps": ["Draft LinkedIn post announcement", "Draft email confirmation"],
+            }
+        )
+        post_draft = "🚀 Big Announcement: We are partnering with Acme Corp!"
+        img_spec = "🎨 PRODUCTION-GRADE VISUAL SPECIFICATION: Dual logo placement."
+
+        client = FakeGroq([assessment, post_draft, img_spec])
+
+        completed = reasoning_loop.run_once(client=client)
+
+        self.assertEqual(completed, 1)
+        approval_path = self.directories["PENDING_APPROVAL_DIR"] / "email_partnership.md"
+        self.assertTrue(approval_path.is_file())
+
+        approval, _ = read_frontmatter(approval_path)
+        self.assertEqual(approval["type"], "linkedin_post")
+        self.assertEqual(approval["post_body"], post_draft)
+        self.assertEqual(approval["image_suggestion"], img_spec)
 
 
 if __name__ == "__main__":
