@@ -17,6 +17,8 @@ Grounded Reasoning · Cryptographic Approval Gate · Zero-Cloud File State · Re
 [![License](https://img.shields.io/badge/License-MIT-22c55e?style=for-the-badge)](LICENSE)
 [![Deployment](https://img.shields.io/badge/Daemon-launchd%20%7C%20systemd-0078d4?style=for-the-badge)](docs/DEPLOYMENT.md)
 
+<br/>
+<br/>
 </div>
 
 ---
@@ -28,6 +30,67 @@ Grounded Reasoning · Cryptographic Approval Gate · Zero-Cloud File State · Re
 > [!IMPORTANT]
 > **Human-in-the-Loop Invariant (Rule 4):**
 > LLM classifications and generated drafts **never execute external actions autonomously**. Outbound emails or posts are dispatched **only** when a human explicitly approves an immutable artifact (`Pending_Approval/` → `Approved/`) through the protected local dashboard interface.
+
+---
+
+## 🖥️ Dashboard & Interface Showcase
+
+The ChiefMind frontend is a dark-mode glassmorphic single-page application engineered with Vanilla CSS and modern web ergonomics for high-velocity executive triage.
+
+<div align="center">
+
+### 🌟 1. Executive Dashboard & Real-Time KPI Metrics
+*Live overview displaying pending approval queue, auto-handled digests counter, execution metrics, and real-time intake stream.*
+
+<br/>
+
+<a href="docs/screenshots/dashboard_overview.jpeg">
+  <img src="docs/screenshots/dashboard_overview.jpeg" alt="ChiefMind Executive Dashboard" width="100%" style="border-radius: 10px; border: 1px solid #1e293b; box-shadow: 0 10px 30px rgba(0,0,0,0.5);" />
+</a>
+
+<br/>
+<br/>
+
+<table>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <h4>📋 Structured Action Plans</h4>
+      <a href="docs/screenshots/action_plans.jpeg">
+        <img src="docs/screenshots/action_plans.jpeg" alt="Structured Action Plans" width="100%" style="border-radius: 8px; border: 1px solid #1e293b;" />
+      </a>
+      <br/>
+      <sub>Categorized actionable plans (Email, LinkedIn, Tasks) synthesized by Reasoning Agent</sub>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <h4>📊 Completion Ledger & Rollup</h4>
+      <a href="docs/screenshots/done_archive_summary.jpeg">
+        <img src="docs/screenshots/done_archive_summary.jpeg" alt="Done Summary Rollup" width="100%" style="border-radius: 8px; border: 1px solid #1e293b;" />
+      </a>
+      <br/>
+      <sub>Rollup metrics tracking automated routines vs approval-routed workflows</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <h4>🗄️ Completed Work Archive</h4>
+      <a href="docs/screenshots/done_archive_items.jpeg">
+        <img src="docs/screenshots/done_archive_items.jpeg" alt="Completed Items Archive" width="100%" style="border-radius: 8px;" />
+      </a>
+      <br/>
+      <sub>Searchable history of executed external dispatches and processed intake</sub>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <h4>📜 System Audit Stream</h4>
+      <a href="docs/screenshots/activity_log.jpeg">
+        <img src="docs/screenshots/activity_log.jpeg" alt="Activity Log & Audit Stream" width="100%" style="border-radius: 8px;" />
+      </a>
+      <br/>
+      <sub>Immutable background audit trail documenting ingestion timestamps and decisions</sub>
+    </td>
+  </tr>
+</table>
+
+</div>
 
 ---
 
@@ -270,7 +333,8 @@ ai-personal-employee/
 ├── docs/
 │   ├── DEPLOYMENT.md            # Daemon deployment guide (launchd / systemd)
 │   ├── GUARDRAILS.md            # Security rules & rate limit policies
-│   └── KnowledgeBase.md         # Reference knowledge document for grounding
+│   ├── KnowledgeBase.md         # Reference knowledge document for grounding
+│   └── screenshots/             # Glassmorphic UI & dashboard screenshots
 ├── scripts/
 │   ├── .env.example             # Environment template
 │   ├── config.py                # Centralized paths and configuration loader
